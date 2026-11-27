@@ -1,0 +1,78 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.anggik.keyboard"
+4    android:versionCode="1"
+5    android:versionName="1.0.0" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="26"
+9        android:targetSdkVersion="36" />
+10
+11    <uses-permission android:name="android.permission.VIBRATE" />
+11-->/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/AndroidManifest.xml:4:5-66
+11-->/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/AndroidManifest.xml:4:22-63
+12
+13    <application
+13-->/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/AndroidManifest.xml:6:5-38:19
+14        android:allowBackup="false"
+14-->/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/AndroidManifest.xml:7:9-36
+15        android:directBootAware="true"
+15-->/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/AndroidManifest.xml:8:9-39
+16        android:extractNativeLibs="false"
+17        android:hardwareAccelerated="true"
+17-->/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/AndroidManifest.xml:9:9-43
+18        android:label="@string/app_name"
+18-->/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/AndroidManifest.xml:10:9-41
+19        android:supportsRtl="false" >
+19-->/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/AndroidManifest.xml:11:9-36
+20        <activity
+20-->/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/AndroidManifest.xml:13:9-22:20
+21            android:name="com.anggik.keyboard.ui.SetupActivity"
+21-->/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/AndroidManifest.xml:14:13-45
+22            android:directBootAware="true"
+22-->/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/AndroidManifest.xml:15:13-43
+23            android:exported="true"
+23-->/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/AndroidManifest.xml:16:13-36
+24            android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar" >
+24-->/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/AndroidManifest.xml:17:13-81
+25            <intent-filter>
+25-->/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/AndroidManifest.xml:18:13-21:29
+26                <action android:name="android.intent.action.MAIN" />
+26-->/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/AndroidManifest.xml:19:17-69
+26-->/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/AndroidManifest.xml:19:25-66
+27
+28                <category android:name="android.intent.category.LAUNCHER" />
+28-->/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/AndroidManifest.xml:20:17-77
+28-->/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/AndroidManifest.xml:20:27-74
+29            </intent-filter>
+30        </activity>
+31
+32        <service
+32-->/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/AndroidManifest.xml:24:9-36:19
+33            android:name="com.anggik.keyboard.service.AnggiKeyboardService"
+33-->/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/AndroidManifest.xml:25:13-57
+34            android:directBootAware="true"
+34-->/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/AndroidManifest.xml:26:13-43
+35            android:exported="true"
+35-->/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/AndroidManifest.xml:27:13-36
+36            android:label="@string/ime_name"
+36-->/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/AndroidManifest.xml:28:13-45
+37            android:permission="android.permission.BIND_INPUT_METHOD" >
+37-->/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/AndroidManifest.xml:29:13-70
+38            <intent-filter>
+38-->/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/AndroidManifest.xml:30:13-32:29
+39                <action android:name="android.view.InputMethod" />
+39-->/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/AndroidManifest.xml:31:17-67
+39-->/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/AndroidManifest.xml:31:25-64
+40            </intent-filter>
+41
+42            <meta-data
+42-->/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/AndroidManifest.xml:33:13-35:50
+43                android:name="android.view.im"
+43-->/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/AndroidManifest.xml:34:17-47
+44                android:resource="@xml/method" />
+44-->/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/AndroidManifest.xml:35:17-47
+45        </service>
+46    </application>
+47
+48</manifest>

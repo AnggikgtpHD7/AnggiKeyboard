@@ -1,0 +1,19 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.anggik.keyboard.app-mergeDebugResources-2:/values/values.xml",
+            "map": [
+                {
+                    "source": "/data/data/com.termux/files/home/AnggiKeyboard/app/src/main/res/values/strings.xml",
+                    "from": {
+                        "startLines": "2,3,4,5",
+                        "startColumns": "4,4,4,4",
+                        "startOffsets": "55,106,167,222",
+                        "endColumns": "50,60,54,58",
+                        "endOffsets": "101,162,217,276"
+                    }
+                }
+            ]
+        }
+    ]
+}

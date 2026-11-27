@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.AnggiKeyboard" parent="@android:style/Theme.DeviceDefault.Light.NoActionBar">
+        <item name="android:windowSplashScreenBackground">#FFF2F5F3</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_splash_animated</item>
+        <item name="android:windowSplashScreenAnimationDuration">250</item>
+    </style>
+</resources>

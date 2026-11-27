@@ -1,0 +1,8 @@
+HSPLcom/anggik/keyboard/engine/FastInputDispatcher;->commitText(Ljava/lang/CharSequence;Landroid/view/inputmethod/InputConnection;)V
+HSPLcom/anggik/keyboard/engine/GlideTypingEngine;->decodeTrajectory([F[FICCZLcom/anggik/keyboard/engine/LocalWordPredictor;ZLjava/util/List;)Ljava/lang/String;
+HSPLcom/anggik/keyboard/engine/LocalWordPredictor;->suggest(Ljava/lang/String;ZLjava/util/List;)V
+HSPLcom/anggik/keyboard/service/AnggiKeyboardService;->onCreateInputView()Landroid/view/View;
+HSPLcom/anggik/keyboard/service/AnggiKeyboardService;->onStartInputView(Landroid/view/inputmethod/EditorInfo;Z)V
+HSPLcom/anggik/keyboard/service/AnggiKeyboardService;->onUpdateSelection(IIIIII)V
+HSPLcom/anggik/keyboard/ui/AcceleratedKeyboardSurface;->onDraw(Landroid/graphics/Canvas;)V
+HSPLcom/anggik/keyboard/ui/AcceleratedKeyboardSurface;->onTouchEvent(Landroid/view/MotionEvent;)Z

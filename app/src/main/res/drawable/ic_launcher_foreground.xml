@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:name="keyboard_chassis"
+        android:pivotX="54"
+        android:pivotY="54">
+        <!-- Shadow Base -->
+        <path
+            android:fillColor="#38081C11"
+            android:pathData="M31,37h46a6,6 0 0,1 6,6v26a6,6 0 0,1 -6,6h-46a6,6 0 0,1 -6,-6v-26a6,6 0 0,1 6,-6z" />
+        <!-- Main White Chassis -->
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M31,35h46a6,6 0 0,1 6,6v26a6,6 0 0,1 -6,6h-46a6,6 0 0,1 -6,-6v-26a6,6 0 0,1 6,-6z" />
+        <!-- Row 1 Keycaps (5 keys) -->
+        <path
+            android:fillColor="#FF1B4D32"
+            android:pathData="M30,40h7a1.8,1.8 0 0,1 1.8,1.8v4.4a1.8,1.8 0 0,1 -1.8,1.8h-7a1.8,1.8 0 0,1 -1.8,-1.8v-4.4a1.8,1.8 0 0,1 1.8,-1.8zM40.5,40h7a1.8,1.8 0 0,1 1.8,1.8v4.4a1.8,1.8 0 0,1 -1.8,1.8h-7a1.8,1.8 0 0,1 -1.8,-1.8v-4.4a1.8,1.8 0 0,1 1.8,-1.8zM51,40h6a1.8,1.8 0 0,1 1.8,1.8v4.4a1.8,1.8 0 0,1 -1.8,1.8h-6a1.8,1.8 0 0,1 -1.8,-1.8v-4.4a1.8,1.8 0 0,1 1.8,-1.8zM60.5,40h7a1.8,1.8 0 0,1 1.8,1.8v4.4a1.8,1.8 0 0,1 -1.8,1.8h-7a1.8,1.8 0 0,1 -1.8,-1.8v-4.4a1.8,1.8 0 0,1 1.8,-1.8zM71,40h7a1.8,1.8 0 0,1 1.8,1.8v4.4a1.8,1.8 0 0,1 -1.8,1.8h-7a1.8,1.8 0 0,1 -1.8,-1.8v-4.4a1.8,1.8 0 0,1 1.8,-1.8z" />
+        <!-- Row 2 Keycaps (4 keys) -->
+        <path
+            android:fillColor="#FF2E8B57"
+            android:pathData="M33,50.5h8a1.8,1.8 0 0,1 1.8,1.8v4.4a1.8,1.8 0 0,1 -1.8,1.8h-8a1.8,1.8 0 0,1 -1.8,-1.8v-4.4a1.8,1.8 0 0,1 1.8,-1.8zM44.5,50.5h8a1.8,1.8 0 0,1 1.8,1.8v4.4a1.8,1.8 0 0,1 -1.8,1.8h-8a1.8,1.8 0 0,1 -1.8,-1.8v-4.4a1.8,1.8 0 0,1 1.8,-1.8zM56,50.5h8a1.8,1.8 0 0,1 1.8,1.8v4.4a1.8,1.8 0 0,1 -1.8,1.8h-8a1.8,1.8 0 0,1 -1.8,-1.8v-4.4a1.8,1.8 0 0,1 1.8,-1.8zM67.5,50.5h7.5a1.8,1.8 0 0,1 1.8,1.8v4.4a1.8,1.8 0 0,1 -1.8,1.8h-7.5a1.8,1.8 0 0,1 -1.8,-1.8v-4.4a1.8,1.8 0 0,1 1.8,-1.8z" />
+        <!-- Row 3 Spacebar + Accent Enter -->
+        <path
+            android:fillColor="#FF1B4D32"
+            android:pathData="M31,61h7a2,2 0 0,1 2,2v3a2,2 0 0,1 -2,2h-7a2,2 0 0,1 -2,-2v-3a2,2 0 0,1 2,-2zM43,61h22a2,2 0 0,1 2,2v3a2,2 0 0,1 -2,2h-22a2,2 0 0,1 -2,-2v-3a2,2 0 0,1 2,-2z" />
+        <path
+            android:fillColor="#FF49C474"
+            android:pathData="M70,61h7a2,2 0 0,1 2,2v3a2,2 0 0,1 -2,2h-7a2,2 0 0,1 -2,-2v-3a2,2 0 0,1 2,-2z" />
+    </group>
+</vector>

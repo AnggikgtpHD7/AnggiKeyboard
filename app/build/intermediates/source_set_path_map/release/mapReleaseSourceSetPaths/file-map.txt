@@ -1,0 +1,8 @@
+com.anggik.keyboard.app-pngs-0 /data/data/com.termux/files/home/AnggiKeyboard/app/build/generated/res/pngs/release
+com.anggik.keyboard.app-resValues-1 /data/data/com.termux/files/home/AnggiKeyboard/app/build/generated/res/resValues/release
+com.anggik.keyboard.app-packageReleaseResources-2 /data/data/com.termux/files/home/AnggiKeyboard/app/build/intermediates/incremental/release/packageReleaseResources/merged.dir
+com.anggik.keyboard.app-packageReleaseResources-3 /data/data/com.termux/files/home/AnggiKeyboard/app/build/intermediates/incremental/release/packageReleaseResources/stripped.dir
+com.anggik.keyboard.app-merged-not-compiled-resources-4 /data/data/com.termux/files/home/AnggiKeyboard/app/build/intermediates/merged-not-compiled-resources/release
+com.anggik.keyboard.app-release-5 /data/data/com.termux/files/home/AnggiKeyboard/app/build/intermediates/merged_res/release/mergeReleaseResources
+com.anggik.keyboard.app-main-6 /data/data/com.termux/files/home/AnggiKeyboard/app/src/main/res
+com.anggik.keyboard.app-release-7 /data/data/com.termux/files/home/AnggiKeyboard/app/src/release/res

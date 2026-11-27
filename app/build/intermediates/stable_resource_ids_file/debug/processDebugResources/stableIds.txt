@@ -1,0 +1,5 @@
+com.anggik.keyboard:xml/method = 0x7f020000
+com.anggik.keyboard:string/subtype_id_id = 0x7f010003
+com.anggik.keyboard:string/subtype_en_us = 0x7f010002
+com.anggik.keyboard:string/ime_name = 0x7f010001
+com.anggik.keyboard:string/app_name = 0x7f010000

@@ -1,0 +1,18 @@
+com.anggik.keyboard.service.AnggiKeyboardService
+com.anggik.keyboard.ui.SetupActivity
+com.anggik.keyboard.ui.AcceleratedKeyboardSurface: com.anggik.keyboard.ui.AcceleratedKeyboardSurface$Listener getListener()
+com.anggik.keyboard.service.AnggiKeyboardService: AnggiKeyboardService()
+com.anggik.keyboard.ui.AcceleratedKeyboardSurface: com.anggik.keyboard.engine.GlideTypingEngine getGlideEngine()
+com.anggik.keyboard.ui.SetupActivity: SetupActivity()
+com.anggik.keyboard.model.KeyboardLayer: com.anggik.keyboard.model.KeyboardLayer valueOf(java.lang.String)
+com.anggik.keyboard.model.KeyboardLayer: com.anggik.keyboard.model.KeyboardLayer[] values()
+com.anggik.keyboard.ui.AcceleratedKeyboardSurface: void setListener(com.anggik.keyboard.ui.AcceleratedKeyboardSurface$Listener)
+com.anggik.keyboard.ui.AcceleratedKeyboardSurface$UtilityPanel: com.anggik.keyboard.ui.AcceleratedKeyboardSurface$UtilityPanel valueOf(java.lang.String)
+com.anggik.keyboard.ui.AcceleratedKeyboardSurface$UtilityPanel: com.anggik.keyboard.ui.AcceleratedKeyboardSurface$UtilityPanel[] values()
+com.anggik.keyboard.ui.AcceleratedKeyboardSurface: void setLanguageName(java.lang.String)
+com.anggik.keyboard.ui.AcceleratedKeyboardSurface: void setSuggestions(java.util.List)
+com.anggik.keyboard.model.ShiftState: com.anggik.keyboard.model.ShiftState[] values()
+com.anggik.keyboard.model.ShiftState: com.anggik.keyboard.model.ShiftState valueOf(java.lang.String)
+com.anggik.keyboard.model.KeyType: com.anggik.keyboard.model.KeyType[] values()
+com.anggik.keyboard.model.KeyType: com.anggik.keyboard.model.KeyType valueOf(java.lang.String)
+com.anggik.keyboard.ui.AcceleratedKeyboardSurface: void setAutoShift(boolean)

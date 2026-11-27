@@ -57,9 +57,26 @@ class SetupActivity : Activity() {
             backCallback = cb
         }
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            SplashBridge.attachExitAnimation(this)
+        }
+
         rootHost = FrameLayout(this)
         setContentView(rootHost)
         rebuildSettingsUi()
+
+        if (savedInstanceState == null) {
+            val amoled = devicePrefs.getBoolean("amoled_dark", false)
+            val overlay = LaunchSplashOverlay(this, SettingsPalette.fromMode(amoled))
+            rootHost.addView(
+                overlay,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+            )
+            overlay.playAndDismiss(rootHost)
+        }
     }
 
     override fun onDestroy() {

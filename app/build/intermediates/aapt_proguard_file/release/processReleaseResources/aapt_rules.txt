@@ -1,0 +1,2 @@
+-keep class com.anggik.keyboard.service.AnggiKeyboardService { <init>(); }
+-keep class com.anggik.keyboard.ui.SetupActivity { <init>(); }

@@ -1,0 +1,5 @@
+int string app_name 0x7f010000
+int string ime_name 0x7f010001
+int string subtype_en_us 0x7f010002
+int string subtype_id_id 0x7f010003
+int xml method 0x7f020000
