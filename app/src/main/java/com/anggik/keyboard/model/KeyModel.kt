@@ -7,6 +7,7 @@ enum class KeyType {
     MODE_SYMBOLS,
     MODE_SYMBOLS_ALT,
     MODE_EMOJI,
+    EMOJI_PAGE,
     MODE_NUMPAD,
     COMMA,
     SPACE,
@@ -33,7 +34,8 @@ data class KeySpec(
     val hint: String = "",
     val type: KeyType = KeyType.CHAR,
     val weight: Float = 1.0f,
-    val longPressText: String? = null
+    val longPressText: String? = null,
+    val code: Int = 0
 )
 
 object KeyboardLayouts {
@@ -133,28 +135,83 @@ object KeyboardLayouts {
         )
     )
 
-    val emojiRows: List<List<KeySpec>> = listOf(
+    private val emojiFooterRow: List<KeySpec> = listOf(
+        KeySpec("ABC", type = KeyType.MODE_EMOJI, weight = 1.38f),
+        KeySpec("😀", type = KeyType.EMOJI_PAGE, weight = 1.3f, code = 0),
+        KeySpec("👍", type = KeyType.EMOJI_PAGE, weight = 1.3f, code = 1),
+        KeySpec("💻", type = KeyType.EMOJI_PAGE, weight = 1.3f, code = 2),
+        KeySpec(">_", type = KeyType.EMOJI_PAGE, weight = 1.3f, code = 3),
+        KeySpec("", type = KeyType.BACKSPACE, weight = 1.38f)
+    )
+
+    val emojiPages: List<List<List<KeySpec>>> = listOf(
+        // Page 0: Smileys
         listOf(
-            KeySpec("😀"), KeySpec("😂"), KeySpec("🥰"), KeySpec("😎"), KeySpec("🤔"),
-            KeySpec("😭"), KeySpec("😡"), KeySpec("👍"), KeySpec("🙏"), KeySpec("🔥")
+            listOf(
+                KeySpec("😀"), KeySpec("😂"), KeySpec("🥹"), KeySpec("🥰"), KeySpec("😎"),
+                KeySpec("🤔"), KeySpec("🫡"), KeySpec("😭"), KeySpec("😡"), KeySpec("🤯")
+            ),
+            listOf(
+                KeySpec("😴"), KeySpec("🥳"), KeySpec("😇"), KeySpec("🤝"), KeySpec("🙏"),
+                KeySpec("👏"), KeySpec("🙌"), KeySpec("💪"), KeySpec("👀"), KeySpec("🧠")
+            ),
+            listOf(
+                KeySpec("❤️"), KeySpec("🧡"), KeySpec("💚"), KeySpec("💙"), KeySpec("🖤"),
+                KeySpec("🔥"), KeySpec("✨"), KeySpec("💯"), KeySpec("🎉"), KeySpec("⚡")
+            ),
+            emojiFooterRow
         ),
+        // Page 1: Gestures & Status
         listOf(
-            KeySpec("❤️"), KeySpec("✨"), KeySpec("🎉"), KeySpec("💯"), KeySpec("✅"),
-            KeySpec("⚡"), KeySpec("🚀"), KeySpec("💻"), KeySpec("📱"), KeySpec("🛠️")
+            listOf(
+                KeySpec("👍"), KeySpec("👎"), KeySpec("👌"), KeySpec("✌️"), KeySpec("🤞"),
+                KeySpec("🤟"), KeySpec("🤙"), KeySpec("👋"), KeySpec("✍️"), KeySpec("🫶")
+            ),
+            listOf(
+                KeySpec("✅"), KeySpec("❌"), KeySpec("⚠️"), KeySpec("🚫"), KeySpec("ℹ️"),
+                KeySpec("❓"), KeySpec("❗"), KeySpec("📌"), KeySpec("📎"), KeySpec("🔒")
+            ),
+            listOf(
+                KeySpec("🔓"), KeySpec("🔑"), KeySpec("🛡️"), KeySpec("⏱️"), KeySpec("📅"),
+                KeySpec("📈"), KeySpec("📉"), KeySpec("🔄"), KeySpec("⬆️"), KeySpec("⬇️")
+            ),
+            emojiFooterRow
         ),
+        // Page 2: Tech & Hardware
         listOf(
-            KeySpec("ABC", type = KeyType.MODE_SYMBOLS, weight = 1.38f),
-            KeySpec("🤝"), KeySpec("👏"), KeySpec("🙌"), KeySpec("💪"),
-            KeySpec("👀"), KeySpec("💡"), KeySpec("📌"),
-            KeySpec("", type = KeyType.BACKSPACE, weight = 1.38f)
+            listOf(
+                KeySpec("💻"), KeySpec("📱"), KeySpec("🖥️"), KeySpec("⌨️"), KeySpec("🖱️"),
+                KeySpec("🔋"), KeySpec("🔌"), KeySpec("📡"), KeySpec("🛰️"), KeySpec("💾")
+            ),
+            listOf(
+                KeySpec("🛠️"), KeySpec("⚙️"), KeySpec("🔧"), KeySpec("🔩"), KeySpec("🧪"),
+                KeySpec("🧬"), KeySpec("🔬"), KeySpec("📦"), KeySpec("🗂️"), KeySpec("🧾")
+            ),
+            listOf(
+                KeySpec("🚀"), KeySpec("🛸"), KeySpec("🌐"), KeySpec("🔗"), KeySpec("📶"),
+                KeySpec("🔦"), KeySpec("🧯"), KeySpec("🎯"), KeySpec("🏆"), KeySpec("💎")
+            ),
+            emojiFooterRow
         ),
+        // Page 3: Dev & Android/Termux Shell Macros
         listOf(
-            KeySpec("?123", type = KeyType.MODE_SYMBOLS, weight = 1.38f),
-            KeySpec("ABC", type = KeyType.MODE_EMOJI, weight = 1.0f),
-            KeySpec(",", type = KeyType.COMMA, weight = 1.0f),
-            KeySpec("English", type = KeyType.SPACE, weight = 3.38f),
-            KeySpec(".", type = KeyType.PERIOD, weight = 1.0f),
-            KeySpec("", type = KeyType.ENTER, weight = 1.38f)
+            listOf(
+                KeySpec("rish -c '", weight = 2.5f),
+                KeySpec("dumpsys ", weight = 2.5f),
+                KeySpec("getprop ", weight = 2.5f),
+                KeySpec("logcat -v time ", weight = 2.5f)
+            ),
+            listOf(
+                KeySpec("pm list packages ", weight = 3.3f),
+                KeySpec("cmd package compile -m speed -f ", weight = 3.4f),
+                KeySpec("ime set ", weight = 3.3f)
+            ),
+            listOf(
+                KeySpec("#!/system/bin/sh", weight = 3.3f),
+                KeySpec("chmod +x ", weight = 3.3f),
+                KeySpec("git status", weight = 3.4f)
+            ),
+            emojiFooterRow
         )
     )
 

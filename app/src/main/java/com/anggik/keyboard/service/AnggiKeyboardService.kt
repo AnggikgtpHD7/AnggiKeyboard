@@ -20,7 +20,6 @@ import com.anggik.keyboard.engine.FastInputDispatcher
 import com.anggik.keyboard.engine.InlineAutofillHelper
 import com.anggik.keyboard.engine.LocalWordPredictor
 import com.anggik.keyboard.ui.AcceleratedKeyboardSurface
-import java.util.Locale
 
 class AnggiKeyboardService : InputMethodService(), AcceleratedKeyboardSurface.Listener {
 
@@ -38,8 +37,12 @@ class AnggiKeyboardService : InputMethodService(), AcceleratedKeyboardSurface.Li
     private var isSensitiveInput = false
     private var lastTrackedWord = ""
 
+    private val dpContext by lazy {
+        createDeviceProtectedStorageContext()
+    }
+
     private val devicePrefs by lazy {
-        createDeviceProtectedStorageContext().getSharedPreferences("anggi_kb_state", Context.MODE_PRIVATE)
+        dpContext.getSharedPreferences("anggi_kb_state", Context.MODE_PRIVATE)
     }
 
     private val clipListener = ClipboardManager.OnPrimaryClipChangedListener {
@@ -50,6 +53,7 @@ class AnggiKeyboardService : InputMethodService(), AcceleratedKeyboardSurface.Li
     override fun onCreate() {
         super.onCreate()
         isIndonesian = devicePrefs.getBoolean("lang_id", false)
+        predictor.initStorage(dpContext.filesDir)
         val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
         cm?.addPrimaryClipChangedListener(clipListener)
     }
@@ -64,6 +68,7 @@ class AnggiKeyboardService : InputMethodService(), AcceleratedKeyboardSurface.Li
         val amoled = devicePrefs.getBoolean("amoled_dark", false)
         val scale = devicePrefs.getFloat("height_scale", 1.0f)
         val haptic = devicePrefs.getBoolean("haptic_enabled", true)
+        val hand = devicePrefs.getInt("hand_mode", 0)
         val toolbarPx = (42f * resources.displayMetrics.density).toInt()
 
         val container = FrameLayout(this).apply {
@@ -73,7 +78,7 @@ class AnggiKeyboardService : InputMethodService(), AcceleratedKeyboardSurface.Li
         val surface = AcceleratedKeyboardSurface(this).apply {
             listener = this@AnggiKeyboardService
             setLanguageName(if (isIndonesian) "Indonesia" else "English")
-            applyVisualConfig(amoled, scale, haptic)
+            applyVisualConfig(amoled, scale, haptic, hand)
         }
 
         val chipRow = LinearLayout(this).apply {
@@ -125,10 +130,11 @@ class AnggiKeyboardService : InputMethodService(), AcceleratedKeyboardSurface.Li
         val amoled = devicePrefs.getBoolean("amoled_dark", false)
         val scale = devicePrefs.getFloat("height_scale", 1.0f)
         val haptic = devicePrefs.getBoolean("haptic_enabled", true)
+        val hand = devicePrefs.getInt("hand_mode", 0)
         val bg = if (amoled) 0xFF000000.toInt() else 0xFFEFF2F0.toInt()
         rootContainer?.setBackgroundColor(bg)
         inlineScrollBar?.setBackgroundColor(bg)
-        keyboardSurface?.applyVisualConfig(amoled, scale, haptic)
+        keyboardSurface?.applyVisualConfig(amoled, scale, haptic, hand)
 
         val inputType = info?.inputType ?: 0
         val inputClass = inputType and InputType.TYPE_MASK_CLASS
@@ -209,7 +215,13 @@ class AnggiKeyboardService : InputMethodService(), AcceleratedKeyboardSurface.Li
                 predictor.learnWord(lastTrackedWord, !isSensitiveInput)
                 lastTrackedWord = ""
             }
-            keyboardSurface?.setSuggestions(emptyList())
+            val prevWord = dispatcher.extractPreviousWord(ic)
+            if (prevWord.isNotEmpty()) {
+                predictor.suggestNextWord(prevWord, isIndonesian, suggestionBuffer)
+                keyboardSurface?.setSuggestions(suggestionBuffer)
+            } else {
+                keyboardSurface?.setSuggestions(emptyList())
+            }
         }
     }
 
@@ -336,5 +348,9 @@ class AnggiKeyboardService : InputMethodService(), AcceleratedKeyboardSurface.Li
     override fun getClipboardHistory(): List<String> {
         if (isSensitiveInput) return emptyList()
         return clipboardRing.toList()
+    }
+
+    override fun onHandModeChanged(mode: Int) {
+        devicePrefs.edit().putInt("hand_mode", mode.coerceIn(0, 2)).apply()
     }
 }

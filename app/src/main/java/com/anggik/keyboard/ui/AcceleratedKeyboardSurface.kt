@@ -46,6 +46,7 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
         fun onCopy()
         fun onPasteText(text: String)
         fun getClipboardHistory(): List<String>
+        fun onHandModeChanged(mode: Int)
     }
 
     var listener: Listener? = null
@@ -71,6 +72,7 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
     private var heightScale = 1.0f
     private var hapticEnabled = true
     private var isAmoledDark = false
+    private var handMode = 0 // 0 = FULL, 1 = RIGHT, 2 = LEFT
 
     private val toolbarHeightPx = 42f * density
     private val baseKeyHeightPx = 47f * density
@@ -103,6 +105,10 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
         textAlign = Paint.Align.CENTER
         typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
     }
+    private val snippetTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textAlign = Paint.Align.CENTER
+        typeface = Typeface.MONOSPACE
+    }
     private val bubbleTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.CENTER
         typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
@@ -131,6 +137,7 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
     }
 
     private var currentLayer = KeyboardLayer.QWERTY
+    private var emojiPageIndex = 0
     private var shiftState = ShiftState.OFF
     private var languageLabel = "English"
     private var imeAction = EditorInfo.IME_ACTION_UNSPECIFIED
@@ -148,6 +155,8 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
     private val toolbarBounds = Array(4) { RectF() }
     private val utilityChipBounds = Array(7) { RectF() }
     private val suggestionChipBounds = Array(4) { RectF() }
+    private val oneHandFlipRect = RectF()
+    private val oneHandExpandRect = RectF()
     private val tempRect = RectF()
     private val bubbleRect = RectF()
     private val vectorPath = Path()
@@ -181,15 +190,17 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
 
     init {
         isHapticFeedbackEnabled = true
-        applyVisualConfig(amoledDark = false, scale = 1.0f, haptic = true)
+        applyVisualConfig(amoledDark = false, scale = 1.0f, haptic = true, mode = 0)
     }
 
-    fun applyVisualConfig(amoledDark: Boolean, scale: Float, haptic: Boolean) {
+    fun applyVisualConfig(amoledDark: Boolean, scale: Float, haptic: Boolean, mode: Int = handMode) {
         val clampedScale = scale.coerceIn(0.85f, 1.20f)
-        val scaleChanged = abs(heightScale - clampedScale) > 0.001f
+        val clampedMode = mode.coerceIn(0, 2)
+        val geometryChanged = abs(heightScale - clampedScale) > 0.001f || handMode != clampedMode
         isAmoledDark = amoledDark
         heightScale = clampedScale
         hapticEnabled = haptic
+        handMode = clampedMode
 
         if (amoledDark) {
             colorBg = 0xFF000000.toInt()
@@ -225,12 +236,13 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
         bubbleBorderPaint.color = colorKeyShadow
         glideTrailPaint.color = colorGlideTrail
         mainTextPaint.color = colorTextPrimary
+        snippetTextPaint.color = colorTextPrimary
         bubbleTextPaint.color = colorTextPrimary
         actionLabelPaint.color = colorTextPrimary
         hintTextPaint.color = colorTextHint
         spaceTextPaint.color = colorTextPrimary
 
-        if (scaleChanged) {
+        if (geometryChanged) {
             requestLayout()
             if (width > 0) rebuildGeometry(width.toFloat())
         }
@@ -313,7 +325,7 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
         KeyboardLayer.QWERTY -> KeyboardLayouts.qwertyRows
         KeyboardLayer.SYMBOLS -> KeyboardLayouts.symbolsRows
         KeyboardLayer.SYMBOLS_ALT -> KeyboardLayouts.symbolsAltRows
-        KeyboardLayer.EMOJI -> KeyboardLayouts.emojiRows
+        KeyboardLayer.EMOJI -> KeyboardLayouts.emojiPages[emojiPageIndex.coerceIn(0, KeyboardLayouts.emojiPages.lastIndex)]
         KeyboardLayer.NUMPAD -> KeyboardLayouts.numpadRows
     }
 
@@ -342,10 +354,43 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
         }
         suggestionChipBounds[3].set(totalWidth - dismissW - colGapPx, 5f * density, totalWidth - colGapPx, toolbarHeightPx - 5f * density)
 
-        val rows = activeRows()
-        val usableWidth = totalWidth - (2f * outerPadXPx)
         val kh = currentKeyHeight()
-        var y = toolbarHeightPx + outerPadTopPx
+        val bodyTop = toolbarHeightPx + outerPadTopPx
+        val bodyBottom = bodyTop + (4 * kh) + (3 * rowGapPx)
+        val gutterW = totalWidth * 0.17f
+
+        val usableLeft: Float
+        val usableRight: Float
+        when (handMode) {
+            1 -> { // RIGHT-HANDED DOCK
+                val gLeft = outerPadXPx
+                val gRight = gutterW - colGapPx
+                val midY = (bodyTop + bodyBottom) / 2f
+                oneHandFlipRect.set(gLeft, bodyTop, gRight, midY - rowGapPx / 2f)
+                oneHandExpandRect.set(gLeft, midY + rowGapPx / 2f, gRight, bodyBottom)
+                usableLeft = gutterW
+                usableRight = totalWidth - outerPadXPx
+            }
+            2 -> { // LEFT-HANDED DOCK
+                usableLeft = outerPadXPx
+                usableRight = totalWidth - gutterW
+                val gLeft = usableRight + colGapPx
+                val gRight = totalWidth - outerPadXPx
+                val midY = (bodyTop + bodyBottom) / 2f
+                oneHandFlipRect.set(gLeft, bodyTop, gRight, midY - rowGapPx / 2f)
+                oneHandExpandRect.set(gLeft, midY + rowGapPx / 2f, gRight, bodyBottom)
+            }
+            else -> {
+                oneHandFlipRect.setEmpty()
+                oneHandExpandRect.setEmpty()
+                usableLeft = outerPadXPx
+                usableRight = totalWidth - outerPadXPx
+            }
+        }
+
+        val rows = activeRows()
+        val usableWidth = usableRight - usableLeft
+        var y = bodyTop
 
         for (r in rows.indices) {
             val rowKeys = rows[r]
@@ -353,7 +398,7 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
             val totalWeight = rowKeys.sumOf { it.weight.toDouble() }.toFloat() + if (isRow2Qwerty) 1.0f else 0f
             val totalGaps = (rowKeys.size - 1) * colGapPx
             val unitWidth = (usableWidth - totalGaps) / totalWeight
-            var x = outerPadXPx + if (isRow2Qwerty) unitWidth * 0.5f else 0f
+            var x = usableLeft + if (isRow2Qwerty) unitWidth * 0.5f else 0f
 
             for (c in rowKeys.indices) {
                 val spec = rowKeys[c]
@@ -404,9 +449,19 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
         drawToolbar(canvas)
 
         mainTextPaint.textSize = 23f * density
+        snippetTextPaint.textSize = 11.5f * density
         actionLabelPaint.textSize = 15f * density
         hintTextPaint.textSize = 10.5f * density
         spaceTextPaint.textSize = 14f * density
+
+        if (handMode != 0) {
+            val yOff = (actionLabelPaint.descent() + actionLabelPaint.ascent()) / 2f
+            keyFillPaint.color = colorKeyMint
+            canvas.drawRoundRect(oneHandFlipRect, keyCornerPx, keyCornerPx, keyFillPaint)
+            canvas.drawRoundRect(oneHandExpandRect, keyCornerPx, keyCornerPx, keyFillPaint)
+            canvas.drawText("⇄", oneHandFlipRect.centerX(), oneHandFlipRect.centerY() - yOff, actionLabelPaint)
+            canvas.drawText("⤢", oneHandExpandRect.centerX(), oneHandExpandRect.centerY() - yOff, actionLabelPaint)
+        }
 
         for (kb in keyBounds) {
             drawKeyCap(canvas, kb, isPressed = false)
@@ -427,7 +482,10 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
         for (i in pointerKeys.indices) {
             val kb = pointerKeys[i] ?: continue
             drawKeyCap(canvas, kb, isPressed = true)
-            if (kb.spec.type == KeyType.CHAR || kb.spec.type == KeyType.COMMA || kb.spec.type == KeyType.PERIOD) {
+            if ((kb.spec.type == KeyType.CHAR && kb.spec.label.length <= 2) ||
+                kb.spec.type == KeyType.COMMA ||
+                kb.spec.type == KeyType.PERIOD
+            ) {
                 drawKeyPreviewBubble(canvas, kb, pointerLongTriggered[i])
             }
         }
@@ -470,10 +528,14 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
         val yOff = (spaceTextPaint.descent() + spaceTextPaint.ascent()) / 2f
 
         if (activeUtilityPanel == UtilityPanel.CURSOR) {
-            val labels = arrayOf("◄", "▲", "▼", "►", "All", "Copy", "✕")
+            val labels = arrayOf("◄", "▲", "▼", "►", "1H", "All", "✕")
             for (i in 0 until 7) {
                 val r = utilityChipBounds[i]
-                keyFillPaint.color = if (i == 6) colorKeyMint else colorKeyWhite
+                keyFillPaint.color = when {
+                    i == 6 -> colorKeyMint
+                    i == 4 && handMode != 0 -> colorKeyEnter
+                    else -> colorKeyWhite
+                }
                 canvas.drawRoundRect(r, 5f * density, 5f * density, keyFillPaint)
                 canvas.drawText(labels[i], r.centerX(), r.centerY() - yOff, spaceTextPaint)
             }
@@ -586,11 +648,13 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
         keyFillPaint.color = when {
             isPressed -> colorKeyPressed
             spec.type == KeyType.ENTER -> colorKeyEnter
+            spec.type == KeyType.EMOJI_PAGE && spec.code == emojiPageIndex -> colorKeyEnter
             spec.type == KeyType.SHIFT ||
                 spec.type == KeyType.BACKSPACE ||
                 spec.type == KeyType.MODE_SYMBOLS ||
                 spec.type == KeyType.MODE_SYMBOLS_ALT ||
                 spec.type == KeyType.MODE_EMOJI ||
+                spec.type == KeyType.EMOJI_PAGE ||
                 spec.type == KeyType.MODE_NUMPAD -> colorKeyMint
             else -> colorKeyWhite
         }
@@ -616,8 +680,13 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
                 } else {
                     spec.label
                 }
-                val yOff = (mainTextPaint.descent() + mainTextPaint.ascent()) / 2f
-                canvas.drawText(label, cx, cy - yOff, mainTextPaint)
+                if (label.length > 2) {
+                    val yOff = (snippetTextPaint.descent() + snippetTextPaint.ascent()) / 2f
+                    canvas.drawText(label.trim(), cx, cy - yOff, snippetTextPaint)
+                } else {
+                    val yOff = (mainTextPaint.descent() + mainTextPaint.ascent()) / 2f
+                    canvas.drawText(label, cx, cy - yOff, mainTextPaint)
+                }
             }
             KeyType.COMMA -> {
                 val yOff = (mainTextPaint.descent() + mainTextPaint.ascent()) / 2f
@@ -636,7 +705,7 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
                 val yOff = (mainTextPaint.descent() + mainTextPaint.ascent()) / 2f
                 canvas.drawText(".", cx, cy - yOff + 2f * density, mainTextPaint)
             }
-            KeyType.MODE_SYMBOLS, KeyType.MODE_SYMBOLS_ALT, KeyType.MODE_NUMPAD -> {
+            KeyType.MODE_SYMBOLS, KeyType.MODE_SYMBOLS_ALT, KeyType.MODE_NUMPAD, KeyType.EMOJI_PAGE -> {
                 val yOff = (actionLabelPaint.descent() + actionLabelPaint.ascent()) / 2f
                 canvas.drawText(spec.label, cx, cy - yOff, actionLabelPaint)
             }
@@ -777,6 +846,21 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
                     handleToolbarTap(x)
                     return true
                 }
+                if (handMode != 0) {
+                    if (oneHandFlipRect.contains(x, y)) {
+                        triggerHaptic(HapticFeedbackConstants.KEYBOARD_TAP)
+                        val flipped = if (handMode == 1) 2 else 1
+                        applyVisualConfig(isAmoledDark, heightScale, hapticEnabled, flipped)
+                        listener?.onHandModeChanged(flipped)
+                        return true
+                    }
+                    if (oneHandExpandRect.contains(x, y)) {
+                        triggerHaptic(HapticFeedbackConstants.KEYBOARD_TAP)
+                        applyVisualConfig(isAmoledDark, heightScale, hapticEnabled, 0)
+                        listener?.onHandModeChanged(0)
+                        return true
+                    }
+                }
                 if (event.actionMasked == MotionEvent.ACTION_POINTER_DOWN && isGliding) {
                     resetGlideState()
                 }
@@ -912,8 +996,12 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
                         1 -> listener?.onCursorMove(KeyEvent.KEYCODE_DPAD_UP)
                         2 -> listener?.onCursorMove(KeyEvent.KEYCODE_DPAD_DOWN)
                         3 -> listener?.onCursorMove(KeyEvent.KEYCODE_DPAD_RIGHT)
-                        4 -> listener?.onSelectAll()
-                        5 -> listener?.onCopy()
+                        4 -> {
+                            val nextMode = (handMode + 1) % 3
+                            applyVisualConfig(isAmoledDark, heightScale, hapticEnabled, nextMode)
+                            listener?.onHandModeChanged(nextMode)
+                        }
+                        5 -> listener?.onSelectAll()
                         6 -> {
                             activeUtilityPanel = UtilityPanel.NONE
                             invalidateStaticLayer()
@@ -1055,6 +1143,11 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
             }
             KeyType.MODE_EMOJI -> {
                 currentLayer = if (currentLayer == KeyboardLayer.EMOJI) KeyboardLayer.QWERTY else KeyboardLayer.EMOJI
+                rebuildGeometry(width.toFloat())
+                invalidateStaticLayer()
+            }
+            KeyType.EMOJI_PAGE -> {
+                emojiPageIndex = spec.code.coerceIn(0, KeyboardLayouts.emojiPages.lastIndex)
                 rebuildGeometry(width.toFloat())
                 invalidateStaticLayer()
             }

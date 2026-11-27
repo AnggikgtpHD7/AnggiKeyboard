@@ -14,16 +14,22 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import com.anggik.keyboard.service.AnggiKeyboardService
+import java.io.File
 
 class SetupActivity : Activity() {
 
     private lateinit var statusView: TextView
     private lateinit var prefSummaryView: TextView
 
+    private val dpContext by lazy {
+        createDeviceProtectedStorageContext()
+    }
+
     private val devicePrefs by lazy {
-        createDeviceProtectedStorageContext().getSharedPreferences("anggi_kb_state", Context.MODE_PRIVATE)
+        dpContext.getSharedPreferences("anggi_kb_state", Context.MODE_PRIVATE)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -32,16 +38,19 @@ class SetupActivity : Activity() {
         val dp = resources.displayMetrics.density
         val pad = (18 * dp).toInt()
 
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(pad, pad, pad, pad)
+        val scroll = ScrollView(this).apply {
             setBackgroundColor(0xFFEFF2F0.toInt())
         }
 
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad, pad, pad)
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            root.setOnApplyWindowInsetsListener { v, insets ->
+            scroll.setOnApplyWindowInsetsListener { v, insets ->
                 val bars = insets.getInsets(WindowInsets.Type.systemBars())
-                v.setPadding(pad + bars.left, pad + bars.top, pad + bars.right, pad + bars.bottom)
+                root.setPadding(pad + bars.left, pad + bars.top, pad + bars.right, pad + bars.bottom)
                 insets
             }
         }
@@ -102,8 +111,17 @@ class SetupActivity : Activity() {
             }
         }
 
+        val btnHand = Button(this).apply {
+            text = "5. Mode Satu Tangan (Full / Kanan / Kiri)"
+            setOnClickListener {
+                val next = (devicePrefs.getInt("hand_mode", 0) + 1) % 3
+                devicePrefs.edit().putInt("hand_mode", next).apply()
+                refreshPrefSummary()
+            }
+        }
+
         val btnHaptic = Button(this).apply {
-            text = "5. Toggle Getaran Haptik"
+            text = "6. Toggle Getaran Haptik"
             setOnClickListener {
                 val next = !devicePrefs.getBoolean("haptic_enabled", true)
                 devicePrefs.edit().putBoolean("haptic_enabled", next).apply()
@@ -112,7 +130,7 @@ class SetupActivity : Activity() {
         }
 
         val testText = EditText(this).apply {
-            hint = "Uji ketik, swipe/glide typing & prediksi kata..."
+            hint = "Uji ketik, swipe typing, bigram & shell macros..."
             gravity = Gravity.TOP or Gravity.START
             minLines = 2
             setBackgroundColor(0xFFFFFFFF.toInt())
@@ -138,10 +156,12 @@ class SetupActivity : Activity() {
         root.addView(btnSelect)
         root.addView(btnTheme)
         root.addView(btnScale)
+        root.addView(btnHand)
         root.addView(btnHaptic)
         root.addView(testText, gapLp)
         root.addView(testNumber, gapLp)
-        setContentView(root)
+        scroll.addView(root)
+        setContentView(scroll)
         refreshPrefSummary()
     }
 
@@ -149,7 +169,14 @@ class SetupActivity : Activity() {
         val amoled = devicePrefs.getBoolean("amoled_dark", false)
         val scale = (devicePrefs.getFloat("height_scale", 1.0f) * 100).toInt()
         val haptic = devicePrefs.getBoolean("haptic_enabled", true)
-        prefSummaryView.text = "Tema: ${if (amoled) "AMOLED True Black" else "Mint Light"} | Skala Tinggi: ${scale}% | Haptik: ${if (haptic) "ON" else "OFF"}"
+        val handLabel = when (devicePrefs.getInt("hand_mode", 0)) {
+            1 -> "Kanan"
+            2 -> "Kiri"
+            else -> "Full"
+        }
+        val learnedFile = File(dpContext.filesDir, "learned_words.txt")
+        val learnedCount = if (learnedFile.exists()) learnedFile.readLines().count { it.isNotBlank() } else 0
+        prefSummaryView.text = "Tema: ${if (amoled) "AMOLED Black" else "Mint Light"} | Tinggi: ${scale}% | Tangan: $handLabel | Haptik: ${if (haptic) "ON" else "OFF"} | Kamus: $learnedCount kata"
     }
 
     override fun onResume() {

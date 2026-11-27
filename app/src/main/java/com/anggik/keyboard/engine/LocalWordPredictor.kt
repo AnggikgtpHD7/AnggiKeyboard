@@ -1,5 +1,6 @@
 package com.anggik.keyboard.engine
 
+import java.io.File
 import java.util.Locale
 
 class LocalWordPredictor {
@@ -45,7 +46,70 @@ class LocalWordPredictor {
         "tolong", "tugas", "tujuan", "tulis", "untuk", "utama", "waktu", "walaupun", "yang"
     )
 
-    private val learnedWords = ArrayList<String>(64)
+    private val contractions = mapOf(
+        "im" to "I'm",
+        "ive" to "I've",
+        "id" to "I'd",
+        "dont" to "don't",
+        "cant" to "can't",
+        "wont" to "won't",
+        "its" to "it's",
+        "thats" to "that's",
+        "youre" to "you're",
+        "didnt" to "didn't",
+        "doesnt" to "doesn't",
+        "isnt" to "isn't"
+    )
+
+    private val bigrams = mapOf(
+        // Indonesian
+        "sudah" to listOf("aktif", "berhasil", "selesai"),
+        "tidak" to listOf("ada", "bisa", "perlu"),
+        "untuk" to listOf("membuat", "cek", "sistem"),
+        "akan" to listOf("dilakukan", "menjadi", "segera"),
+        "bisa" to listOf("langsung", "digunakan", "cek"),
+        "saya" to listOf("sudah", "akan", "ingin"),
+        "yang" to listOf("baru", "sama", "digunakan"),
+        // English
+        "i" to listOf("am", "have", "will"),
+        "the" to listOf("system", "next", "file"),
+        "to" to listOf("check", "create", "update"),
+        "is" to listOf("not", "ready", "working"),
+        "for" to listOf("the", "android", "testing"),
+        "can" to listOf("be", "you", "we"),
+        // CLI / Shell
+        "git" to listOf("status", "add", "commit"),
+        "pm" to listOf("install", "list", "grant"),
+        "cmd" to listOf("package", "appops", "activity"),
+        "dumpsys" to listOf("input_method", "meminfo", "window"),
+        "rish" to listOf("-c", "whoami", "id")
+    )
+
+    private val learnedWords = ArrayList<String>(256)
+    private var storageFile: File? = null
+
+    fun initStorage(dir: File) {
+        val file = File(dir, "learned_words.txt")
+        storageFile = file
+        if (!file.exists()) return
+        runCatching {
+            file.readLines(Charsets.UTF_8).forEach { line ->
+                val w = line.trim().lowercase(Locale.ROOT)
+                if (w.length in 3..24 && w.all { it.isLetter() } && !learnedWords.contains(w)) {
+                    if (learnedWords.size < 256) learnedWords.add(w)
+                }
+            }
+        }
+    }
+
+    private fun persistLearnedWords() {
+        val target = storageFile ?: return
+        runCatching {
+            val tmp = File(target.parentFile, "learned_words.tmp")
+            tmp.writeText(learnedWords.joinToString("\n"), Charsets.UTF_8)
+            tmp.renameTo(target)
+        }
+    }
 
     fun getLexicon(isIndonesian: Boolean): Array<String> = if (isIndonesian) idLexicon else enLexicon
 
@@ -56,11 +120,30 @@ class LocalWordPredictor {
         val clean = rawWord.trim().lowercase(Locale.ROOT)
         if (clean.length !in 3..24) return
         if (!clean.all { it.isLetter() }) return
-        if (learnedWords.contains(clean)) return
-        if (learnedWords.size >= 64) {
+        val existingIdx = learnedWords.indexOf(clean)
+        if (existingIdx != -1) {
+            if (existingIdx != learnedWords.lastIndex) {
+                learnedWords.removeAt(existingIdx)
+                learnedWords.add(clean)
+                persistLearnedWords()
+            }
+            return
+        }
+        if (learnedWords.size >= 256) {
             learnedWords.removeAt(0)
         }
         learnedWords.add(clean)
+        persistLearnedWords()
+    }
+
+    fun suggestNextWord(previousWord: String, isIndonesian: Boolean, out: MutableList<String>) {
+        out.clear()
+        val key = previousWord.trim().lowercase(Locale.ROOT)
+        if (key.isEmpty()) return
+        val hits = bigrams[key] ?: return
+        for (h in hits) {
+            if (out.size < 3) out.add(h)
+        }
     }
 
     fun suggest(prefix: String, isIndonesian: Boolean, out: MutableList<String>) {
@@ -70,11 +153,18 @@ class LocalWordPredictor {
         val isAllCaps = prefix.length > 1 && prefix.all { it.isUpperCase() }
         val isTitleCase = prefix[0].isUpperCase()
 
+        if (!isIndonesian) {
+            contractions[lower]?.let { out.add(it) }
+        }
+
         for (i in learnedWords.indices.reversed()) {
             val w = learnedWords[i]
             if (w.startsWith(lower) && w != lower) {
-                out.add(applyCasing(w, isAllCaps, isTitleCase))
-                if (out.size >= 3) return
+                val cased = applyCasing(w, isAllCaps, isTitleCase)
+                if (!out.contains(cased)) {
+                    out.add(cased)
+                    if (out.size >= 3) return
+                }
             }
         }
 
@@ -96,8 +186,11 @@ class LocalWordPredictor {
         while (idx < dict.size && out.size < 3) {
             val candidate = dict[idx]
             if (!candidate.startsWith(lower)) break
-            if (candidate != lower && !out.contains(candidate)) {
-                out.add(applyCasing(candidate, isAllCaps, isTitleCase))
+            if (candidate != lower) {
+                val cased = applyCasing(candidate, isAllCaps, isTitleCase)
+                if (!out.contains(cased)) {
+                    out.add(cased)
+                }
             }
             idx++
         }

@@ -37,6 +37,20 @@ class FastInputDispatcher {
         return if (start < before.length) before.subSequence(start, before.length).toString() else ""
     }
 
+    fun extractPreviousWord(ic: InputConnection?): String {
+        if (ic == null) return ""
+        val before = ic.getTextBeforeCursor(48, 0) ?: return ""
+        if (before.isEmpty() || !before.last().isWhitespace()) return ""
+        var end = before.length - 1
+        while (end >= 0 && before[end].isWhitespace()) end--
+        if (end < 0) return ""
+        var start = end
+        while (start >= 0 && (before[start].isLetterOrDigit() || before[start] == '\'' || before[start] == '-')) {
+            start--
+        }
+        return before.subSequence(start + 1, end + 1).toString()
+    }
+
     fun replaceActiveWordWithSuggestion(word: String, ic: InputConnection?) {
         if (ic == null) return
         val before = ic.getTextBeforeCursor(32, 0) ?: ""
