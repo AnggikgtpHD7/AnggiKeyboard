@@ -1,19 +1,18 @@
 package com.anggik.keyboard.engine
 
+import android.annotation.TargetApi
 import android.content.Context
 import android.os.Build
 import android.os.Bundle
 import android.util.Size
-import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.InlineSuggestionsRequest
 import android.view.inputmethod.InlineSuggestionsResponse
 import android.widget.LinearLayout
 import android.widget.inline.InlineContentView
 import android.widget.inline.InlinePresentationSpec
-import androidx.annotation.RequiresApi
 
-@RequiresApi(Build.VERSION_CODES.R)
+@TargetApi(Build.VERSION_CODES.R)
 object InlineAutofillHelper {
 
     fun buildRequest(heightPx: Int): InlineSuggestionsRequest {
@@ -43,13 +42,15 @@ object InlineAutofillHelper {
         }
 
         val h = heightPx.coerceAtLeast(36)
-        val marginPx = (4 * context.resources.displayMetrics.density).toInt()
+        val density = context.resources.displayMetrics.density
+        val chipWidthPx = (140 * density).toInt().coerceIn(64, 640)
+        val marginPx = (4 * density).toInt()
         var inflatedCount = 0
 
         for (suggestion in suggestions) {
             suggestion.inflate(
                 context,
-                Size(ViewGroup.LayoutParams.WRAP_CONTENT, h),
+                Size(chipWidthPx, h),
                 context.mainExecutor
             ) { contentView: InlineContentView? ->
                 if (contentView != null) {
@@ -67,9 +68,6 @@ object InlineAutofillHelper {
                     }
                 }
             }
-        }
-        if (suggestions.isEmpty()) {
-            onVisibilityChanged(false)
         }
     }
 }
