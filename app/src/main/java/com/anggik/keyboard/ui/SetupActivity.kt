@@ -383,6 +383,39 @@ class SetupActivity : Activity() {
 
         content.addView(inputCard)
 
+        // --- CARD 3B: FITUR CERDAS & PRODUKTIVITAS ---
+        content.addView(UiKit.sectionLabel(this@SetupActivity, "Fitur Cerdas & Produktivitas", palette))
+        val smartCard = UiKit.bentoCard(this@SetupActivity, palette)
+
+        val clipVaultOn = devicePrefs.getBoolean("clipboard_vault", true)
+        val clipVaultSwitch = ModernSwitchView(this@SetupActivity, clipVaultOn, palette) { checked ->
+            devicePrefs.edit().putBoolean("clipboard_vault", checked).apply()
+        }
+        smartCard.addView(
+            buildInlinePrefRow(
+                title = "Clipboard Vault & Redaksi OTP",
+                subtitle = "Simpan klip tersemat & hapus otomatis data sensitif 60d",
+                palette = palette,
+                trailing = clipVaultSwitch
+            )
+        )
+
+        smartCard.addView(UiKit.divider(this@SetupActivity, palette))
+
+        val mathMacroOn = devicePrefs.getBoolean("smart_math_macro", true)
+        val mathMacroSwitch = ModernSwitchView(this@SetupActivity, mathMacroOn, palette) { checked ->
+            devicePrefs.edit().putBoolean("smart_math_macro", checked).apply()
+        }
+        smartCard.addView(
+            buildInlinePrefRow(
+                title = "Kalkulator (=) & Makro Sistem",
+                subtitle = "Hitung =128*16 & sisipkan /iso, /uuid, /ip, /dev",
+                palette = palette,
+                trailing = mathMacroSwitch
+            )
+        )
+        content.addView(smartCard)
+
         // --- CARD 4: SANDBOX UJI KETIK ---
         content.addView(UiKit.sectionLabel(this@SetupActivity, "Sandbox Uji Langsung", palette))
         val sandboxCard = UiKit.bentoCard(this@SetupActivity, palette)
