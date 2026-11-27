@@ -25,6 +25,53 @@ class FastInputDispatcher {
         }
     }
 
+    fun extractActiveWordPrefix(ic: InputConnection?): String {
+        if (ic == null) return ""
+        val before = ic.getTextBeforeCursor(32, 0) ?: return ""
+        if (before.isEmpty()) return ""
+        var idx = before.length - 1
+        while (idx >= 0 && before[idx].isLetter()) {
+            idx--
+        }
+        val start = idx + 1
+        return if (start < before.length) before.subSequence(start, before.length).toString() else ""
+    }
+
+    fun replaceActiveWordWithSuggestion(word: String, ic: InputConnection?) {
+        if (ic == null) return
+        val before = ic.getTextBeforeCursor(32, 0) ?: ""
+        var idx = before.length - 1
+        while (idx >= 0 && before[idx].isLetter()) {
+            idx--
+        }
+        val deleteLen = before.length - (idx + 1)
+        ic.beginBatchEdit()
+        try {
+            if (deleteLen > 0) {
+                ic.deleteSurroundingText(deleteLen, 0)
+            }
+            ic.commitText("$word ", 1)
+        } finally {
+            ic.endBatchEdit()
+        }
+    }
+
+    fun tryConvertDoubleSpaceToPeriod(ic: InputConnection?): Boolean {
+        if (ic == null) return false
+        val before = ic.getTextBeforeCursor(4, 0) ?: return false
+        if (before.length >= 2 && before.last() == ' ' && before[before.length - 2].isLetterOrDigit()) {
+            ic.beginBatchEdit()
+            try {
+                ic.deleteSurroundingText(1, 0)
+                ic.commitText(". ", 1)
+            } finally {
+                ic.endBatchEdit()
+            }
+            return true
+        }
+        return false
+    }
+
     fun sendBackspace(ic: InputConnection?) {
         if (ic == null) return
         ic.beginBatchEdit()
@@ -56,6 +103,33 @@ class FastInputDispatcher {
                 ic.endBatchEdit()
             }
         }
+    }
+
+    fun sendCtrlChar(ch: Char, ic: InputConnection?) {
+        if (ic == null) return
+        val upper = ch.uppercaseChar()
+        val keyCode = if (upper in 'A'..'Z') {
+            KeyEvent.KEYCODE_A + (upper.code - 'A'.code)
+        } else {
+            return
+        }
+        val now = SystemClock.uptimeMillis()
+        ic.sendKeyEvent(
+            KeyEvent(
+                now, now, KeyEvent.ACTION_DOWN, keyCode, 0,
+                KeyEvent.META_CTRL_ON or KeyEvent.META_CTRL_LEFT_ON,
+                KeyCharacterMap.VIRTUAL_KEYBOARD, 0,
+                KeyEvent.FLAG_SOFT_KEYBOARD or KeyEvent.FLAG_KEEP_TOUCH_MODE
+            )
+        )
+        ic.sendKeyEvent(
+            KeyEvent(
+                now, now, KeyEvent.ACTION_UP, keyCode, 0,
+                KeyEvent.META_CTRL_ON or KeyEvent.META_CTRL_LEFT_ON,
+                KeyCharacterMap.VIRTUAL_KEYBOARD, 0,
+                KeyEvent.FLAG_SOFT_KEYBOARD or KeyEvent.FLAG_KEEP_TOUCH_MODE
+            )
+        )
     }
 
     fun sendKeyCode(keyCode: Int, ic: InputConnection?) {

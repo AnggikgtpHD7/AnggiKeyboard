@@ -11,6 +11,7 @@ import android.graphics.Typeface
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -29,17 +30,20 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
 
     interface Listener {
         fun onCommitText(text: CharSequence)
+        fun onCtrlChar(ch: Char)
+        fun onDoubleSpace(): Boolean
+        fun onSuggestionPicked(word: String)
         fun onBackspace()
         fun onDeleteWord()
         fun onEnter()
         fun onCursorMove(keyCode: Int)
         fun onSwitchLanguage()
         fun onVoiceInput()
-        fun onPasteText(text: String)
         fun onSelectAll()
         fun onCopy()
-        fun onPasteClipboard()
-        fun getClipboardPreview(): String?
+        fun onPasteText(text: String)
+        fun getClipboardHistory(): List<String>
+        fun clearClipboardHistory()
     }
 
     var listener: Listener? = null
@@ -47,7 +51,7 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
     private val density = resources.displayMetrics.density
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
 
-    // Exact colors extracted from reference UI (3608.jpg)
+    // Exact colors from reference UI
     private val colorBg = 0xFFEFF2F0.toInt()
     private val colorKeyWhite = 0xFFFFFFFF.toInt()
     private val colorKeyMint = 0xFFD1E4D4.toInt()
@@ -77,11 +81,22 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
     }
     private val keyFillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val keyShadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = colorKeyShadow }
+    private val bubbleBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = colorKeyShadow
+        style = Paint.Style.STROKE
+        strokeWidth = 1.2f * density
+    }
 
     private val mainTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = colorTextPrimary
         textAlign = Paint.Align.CENTER
         typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+    }
+    private val bubbleTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = colorTextPrimary
+        textAlign = Paint.Align.CENTER
+        typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+        textSize = 27f * density
     }
     private val actionLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = colorTextPrimary
@@ -114,27 +129,36 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
     private var shiftState = ShiftState.OFF
     private var languageLabel = "English"
     private var imeAction = EditorInfo.IME_ACTION_UNSPECIFIED
+    private var isTerminalContext = false
+    private var isCtrlLatched = false
 
     private enum class UtilityPanel { NONE, CLIPBOARD, CURSOR }
     private var activeUtilityPanel = UtilityPanel.NONE
 
+    private val activeSuggestions = ArrayList<String>(3)
+    private var suppressSuggestionsForWord = false
+
     private data class KeyBound(val row: Int, val col: Int, val spec: KeySpec, val rect: RectF)
     private val keyBounds = ArrayList<KeyBound>(44)
     private val toolbarBounds = Array(4) { RectF() }
-    private val utilityChipBounds = Array(6) { RectF() }
+    private val utilityChipBounds = Array(7) { RectF() }
+    private val suggestionChipBounds = Array(4) { RectF() }
     private val tempRect = RectF()
+    private val bubbleRect = RectF()
     private val vectorPath = Path()
 
     private var staticNode: Any? = null
     private var fallbackBitmap: Bitmap? = null
     private var isStaticDirty = true
 
-    // Multi-touch rollover tracking (up to 5 pointers, zero heap allocation)
+    // Multi-touch rollover tracking (5 pointers, zero heap allocation)
     private val pointerIds = IntArray(5) { MotionEvent.INVALID_POINTER_ID }
     private val pointerKeys = Array<KeyBound?>(5) { null }
     private val pointerDownX = FloatArray(5)
     private val pointerLastDragX = FloatArray(5)
     private val pointerLongTriggered = BooleanArray(5)
+
+    private var lastSpaceUpTimeMs = 0L
 
     private val handler = Handler(Looper.getMainLooper())
     private var repeatRunnable: Runnable? = null
@@ -156,6 +180,28 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
         invalidateStaticLayer()
     }
 
+    fun setContextProfile(useNumpad: Boolean, isTermux: Boolean, action: Int) {
+        var changed = false
+        val targetLayer = if (useNumpad) KeyboardLayer.NUMPAD else KeyboardLayer.QWERTY
+        if (currentLayer != targetLayer) {
+            currentLayer = targetLayer
+            changed = true
+        }
+        if (isTerminalContext != isTermux) {
+            isTerminalContext = isTermux
+            isCtrlLatched = false
+            changed = true
+        }
+        if (imeAction != action) {
+            imeAction = action
+            changed = true
+        }
+        if (changed) {
+            rebuildGeometry(width.toFloat())
+            invalidateStaticLayer()
+        }
+    }
+
     fun setLanguageName(name: String) {
         if (languageLabel != name) {
             languageLabel = name
@@ -163,9 +209,13 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
         }
     }
 
-    fun setEditorAction(action: Int) {
-        if (imeAction != action) {
-            imeAction = action
+    fun setSuggestions(words: List<String>) {
+        if (words.isEmpty()) {
+            suppressSuggestionsForWord = false
+        }
+        if (activeSuggestions != words) {
+            activeSuggestions.clear()
+            activeSuggestions.addAll(words.take(3))
             invalidateStaticLayer()
         }
     }
@@ -189,25 +239,36 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
         KeyboardLayer.SYMBOLS -> KeyboardLayouts.symbolsRows
         KeyboardLayer.SYMBOLS_ALT -> KeyboardLayouts.symbolsAltRows
         KeyboardLayer.EMOJI -> KeyboardLayouts.emojiRows
+        KeyboardLayer.NUMPAD -> KeyboardLayouts.numpadRows
     }
 
     private fun rebuildGeometry(totalWidth: Float) {
         if (totalWidth <= 0f) return
         keyBounds.clear()
 
-        // Toolbar 4 slots: [0]=Grid, [1]=Clipboard, [2]=Mic, [3]=Search/Cursor
+        // Default toolbar 4 slots: [0]=Grid, [1]=Clipboard, [2]=Mic, [3]=Search/Cursor
         val slotW = totalWidth / 6f
         toolbarBounds[0].set(0f, 0f, slotW, toolbarHeightPx)
         toolbarBounds[1].set(slotW, 0f, slotW * 2f, toolbarHeightPx)
         toolbarBounds[2].set(slotW * 2f, 0f, slotW * 3f, toolbarHeightPx)
         toolbarBounds[3].set(totalWidth - slotW, 0f, totalWidth, toolbarHeightPx)
 
-        // Utility panel chips (6 slots across toolbar width)
-        val chipW = (totalWidth - (7 * colGapPx)) / 6f
-        for (i in 0 until 6) {
+        // 7-slot utility / Termux bar
+        val chipW = (totalWidth - (8 * colGapPx)) / 7f
+        for (i in 0 until 7) {
             val left = colGapPx + i * (chipW + colGapPx)
             utilityChipBounds[i].set(left, 5f * density, left + chipW, toolbarHeightPx - 5f * density)
         }
+
+        // 3 suggestion chips + 1 dismiss button
+        val dismissW = 34f * density
+        val sugAreaW = totalWidth - dismissW - (5 * colGapPx)
+        val sugW = sugAreaW / 3f
+        for (i in 0 until 3) {
+            val left = colGapPx + i * (sugW + colGapPx)
+            suggestionChipBounds[i].set(left, 5f * density, left + sugW, toolbarHeightPx - 5f * density)
+        }
+        suggestionChipBounds[3].set(totalWidth - dismissW - colGapPx, 5f * density, totalWidth - colGapPx, toolbarHeightPx - 5f * density)
 
         val rows = activeRows()
         val usableWidth = totalWidth - (2f * outerPadXPx)
@@ -266,7 +327,7 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
         drawToolbar(canvas)
 
         mainTextPaint.textSize = 23f * density
-        actionLabelPaint.textSize = 15.5f * density
+        actionLabelPaint.textSize = 15f * density
         hintTextPaint.textSize = 10.5f * density
         spaceTextPaint.textSize = 14f * density
 
@@ -279,40 +340,117 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
         for (i in pointerKeys.indices) {
             val kb = pointerKeys[i] ?: continue
             drawKeyCap(canvas, kb, isPressed = true)
+            if (kb.spec.type == KeyType.CHAR || kb.spec.type == KeyType.COMMA || kb.spec.type == KeyType.PERIOD) {
+                drawKeyPreviewBubble(canvas, kb, pointerLongTriggered[i])
+            }
         }
+    }
+
+    private fun drawKeyPreviewBubble(canvas: Canvas, kb: KeyBound, showAlt: Boolean) {
+        val raw = if (showAlt && !kb.spec.longPressText.isNullOrEmpty()) {
+            kb.spec.longPressText
+        } else {
+            kb.spec.label
+        }
+        val label = if (currentLayer == KeyboardLayer.QWERTY && shiftState != ShiftState.OFF && !showAlt) {
+            raw.uppercase(Locale.ROOT)
+        } else {
+            raw
+        }
+        if (label.isEmpty()) return
+
+        val bw = (kb.rect.width() * 1.32f).coerceAtLeast(38f * density)
+        val bh = 44f * density
+        val cx = kb.rect.centerX().coerceIn(bw / 2f + 2f * density, width - bw / 2f - 2f * density)
+        val bottom = kb.rect.top - 4f * density
+        val top = (bottom - bh).coerceAtLeast(2f * density)
+
+        bubbleRect.set(cx - bw / 2f, top, cx + bw / 2f, top + bh)
+        tempRect.set(bubbleRect.left, bubbleRect.top + 2f * density, bubbleRect.right, bubbleRect.bottom + 2f * density)
+        canvas.drawRoundRect(tempRect, 8f * density, 8f * density, keyShadowPaint)
+
+        keyFillPaint.color = colorKeyWhite
+        canvas.drawRoundRect(bubbleRect, 8f * density, 8f * density, keyFillPaint)
+        canvas.drawRoundRect(bubbleRect, 8f * density, 8f * density, bubbleBorderPaint)
+
+        val yOff = (bubbleTextPaint.descent() + bubbleTextPaint.ascent()) / 2f
+        canvas.drawText(label, bubbleRect.centerX(), bubbleRect.centerY() - yOff, bubbleTextPaint)
     }
 
     private fun drawToolbar(canvas: Canvas) {
         canvas.drawLine(0f, 0.5f * density, width.toFloat(), 0.5f * density, dividerPaint)
         canvas.drawLine(0f, toolbarHeightPx, width.toFloat(), toolbarHeightPx, dividerPaint)
+        val yOff = (spaceTextPaint.descent() + spaceTextPaint.ascent()) / 2f
 
+        // 1. Cursor Navigation Strip
         if (activeUtilityPanel == UtilityPanel.CURSOR) {
-            val labels = arrayOf("◄", "▲", "▼", "►", "Copy", "✕")
-            for (i in 0 until 6) {
+            val labels = arrayOf("◄", "▲", "▼", "►", "All", "Copy", "✕")
+            for (i in 0 until 7) {
                 val r = utilityChipBounds[i]
-                keyFillPaint.color = if (i == 5) colorKeyMint else colorKeyWhite
+                keyFillPaint.color = if (i == 6) colorKeyMint else colorKeyWhite
                 canvas.drawRoundRect(r, 5f * density, 5f * density, keyFillPaint)
-                val yOffset = (actionLabelPaint.descent() + actionLabelPaint.ascent()) / 2f
-                canvas.drawText(labels[i], r.centerX(), r.centerY() - yOffset, actionLabelPaint)
+                canvas.drawText(labels[i], r.centerX(), r.centerY() - yOff, spaceTextPaint)
             }
             return
         }
 
+        // 2. Multi-Clip History Strip
         if (activeUtilityPanel == UtilityPanel.CLIPBOARD) {
-            val clip = listener?.getClipboardPreview()?.replace('\n', ' ')?.take(28) ?: "Clipboard kosong"
-            val pasteRect = RectF(colGapPx, 5f * density, width - 54f * density, toolbarHeightPx - 5f * density)
-            val closeRect = RectF(width - 48f * density, 5f * density, width - colGapPx, toolbarHeightPx - 5f * density)
-            keyFillPaint.color = colorKeyWhite
-            canvas.drawRoundRect(pasteRect, 5f * density, 5f * density, keyFillPaint)
-            keyFillPaint.color = colorKeyMint
-            canvas.drawRoundRect(closeRect, 5f * density, 5f * density, keyFillPaint)
-            val yOff = (spaceTextPaint.descent() + spaceTextPaint.ascent()) / 2f
-            canvas.drawText(clip, pasteRect.centerX(), pasteRect.centerY() - yOff, spaceTextPaint)
-            canvas.drawText("✕", closeRect.centerX(), closeRect.centerY() - yOff, actionLabelPaint)
+            val history = listener?.getClipboardHistory().orEmpty()
+            if (history.isEmpty()) {
+                val emptyRect = RectF(colGapPx, 5f * density, width - 48f * density, toolbarHeightPx - 5f * density)
+                val closeRect = RectF(width - 42f * density, 5f * density, width - colGapPx, toolbarHeightPx - 5f * density)
+                keyFillPaint.color = colorKeyWhite
+                canvas.drawRoundRect(emptyRect, 5f * density, 5f * density, keyFillPaint)
+                keyFillPaint.color = colorKeyMint
+                canvas.drawRoundRect(closeRect, 5f * density, 5f * density, keyFillPaint)
+                canvas.drawText("Clipboard kosong", emptyRect.centerX(), emptyRect.centerY() - yOff, spaceTextPaint)
+                canvas.drawText("✕", closeRect.centerX(), closeRect.centerY() - yOff, spaceTextPaint)
+            } else {
+                val count = history.size.coerceAtMost(3)
+                for (i in 0 until count) {
+                    val r = suggestionChipBounds[i]
+                    keyFillPaint.color = colorKeyWhite
+                    canvas.drawRoundRect(r, 5f * density, 5f * density, keyFillPaint)
+                    val preview = history[i].replace('\n', ' ').take(12)
+                    canvas.drawText(preview, r.centerX(), r.centerY() - yOff, spaceTextPaint)
+                }
+                val closeRect = suggestionChipBounds[3]
+                keyFillPaint.color = colorKeyMint
+                canvas.drawRoundRect(closeRect, 5f * density, 5f * density, keyFillPaint)
+                canvas.drawText("✕", closeRect.centerX(), closeRect.centerY() - yOff, spaceTextPaint)
+            }
             return
         }
 
-        // 1. 4-square dashboard grid icon
+        // 3. Active Word Suggestions Strip
+        if (activeSuggestions.isNotEmpty() && !suppressSuggestionsForWord) {
+            for (i in activeSuggestions.indices) {
+                val r = suggestionChipBounds[i]
+                keyFillPaint.color = if (i == 0) colorKeyMint else colorKeyWhite
+                canvas.drawRoundRect(r, 5f * density, 5f * density, keyFillPaint)
+                canvas.drawText(activeSuggestions[i], r.centerX(), r.centerY() - yOff, spaceTextPaint)
+            }
+            val dismissRect = suggestionChipBounds[3]
+            keyFillPaint.color = colorKeyWhite
+            canvas.drawRoundRect(dismissRect, 5f * density, 5f * density, keyFillPaint)
+            canvas.drawText("▾", dismissRect.centerX(), dismissRect.centerY() - yOff, spaceTextPaint)
+            return
+        }
+
+        // 4. Termux Quick-Key Bar
+        if (isTerminalContext) {
+            val termKeys = arrayOf("ESC", "TAB", "CTRL", "|", "/", "~", "-")
+            for (i in 0 until 7) {
+                val r = utilityChipBounds[i]
+                keyFillPaint.color = if (i == 2 && isCtrlLatched) colorKeyEnter else colorKeyWhite
+                canvas.drawRoundRect(r, 5f * density, 5f * density, keyFillPaint)
+                canvas.drawText(termKeys[i], r.centerX(), r.centerY() - yOff, spaceTextPaint)
+            }
+            return
+        }
+
+        // 5. Default 4-Icon Utility Toolbar
         run {
             val cx = toolbarBounds[0].centerX()
             val cy = toolbarBounds[0].centerY()
@@ -325,7 +463,6 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
             canvas.drawRoundRect(cx + gap / 2, cy + gap / 2, cx + s + gap / 2, cy + s + gap / 2, 1.5f * density, 1.5f * density, iconPaint)
         }
 
-        // 2. Clipboard icon
         run {
             val cx = toolbarBounds[1].centerX()
             val cy = toolbarBounds[1].centerY()
@@ -338,7 +475,6 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
             canvas.drawLine(cx - 3.5f * density, cy + 3.5f * density, cx + 1.5f * density, cy + 3.5f * density, iconPaint)
         }
 
-        // 3. Mic icon
         run {
             val cx = toolbarBounds[2].centerX()
             val cy = toolbarBounds[2].centerY()
@@ -348,7 +484,6 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
             canvas.drawLine(cx, cy + 5.5f * density, cx, cy + 8.5f * density, iconPaint)
         }
 
-        // 4. Right Search/Cursor magnifier icon
         run {
             val cx = toolbarBounds[3].centerX() - 1.5f * density
             val cy = toolbarBounds[3].centerY() - 1.5f * density
@@ -363,11 +498,9 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
         val rect = kb.rect
         val spec = kb.spec
 
-        // Shadow base
         tempRect.set(rect.left, rect.top + shadowOffsetPx, rect.right, rect.bottom + shadowOffsetPx)
         canvas.drawRoundRect(tempRect, keyCornerPx, keyCornerPx, keyShadowPaint)
 
-        // Keycap fill
         keyFillPaint.color = when {
             isPressed -> colorKeyPressed
             spec.type == KeyType.ENTER -> colorKeyEnter
@@ -375,12 +508,12 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
                 spec.type == KeyType.BACKSPACE ||
                 spec.type == KeyType.MODE_SYMBOLS ||
                 spec.type == KeyType.MODE_SYMBOLS_ALT ||
-                spec.type == KeyType.MODE_EMOJI -> colorKeyMint
+                spec.type == KeyType.MODE_EMOJI ||
+                spec.type == KeyType.MODE_NUMPAD -> colorKeyMint
             else -> colorKeyWhite
         }
         canvas.drawRoundRect(rect, keyCornerPx, keyCornerPx, keyFillPaint)
 
-        // Top-right secondary hint
         if (spec.hint.isNotEmpty()) {
             hintTextPaint.color = colorTextHint
             canvas.drawText(
@@ -407,20 +540,21 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
             KeyType.COMMA -> {
                 val yOff = (mainTextPaint.descent() + mainTextPaint.ascent()) / 2f
                 canvas.drawText(",", cx, cy - yOff + 2f * density, mainTextPaint)
-                // Mini mic icon at top-right of comma
-                val mx = rect.right - 7f * density
-                val my = rect.top + 8f * density
-                iconPaint.color = colorTextHint
-                iconPaint.strokeWidth = 1.25f * density
-                canvas.drawRoundRect(mx - 1.8f * density, my - 4.5f * density, mx + 1.8f * density, my + 0.5f * density, 1.8f * density, 1.8f * density, iconPaint)
-                canvas.drawArc(mx - 3.6f * density, my - 2f * density, mx + 3.6f * density, my + 3f * density, 0f, 180f, false, iconPaint)
-                iconPaint.strokeWidth = 1.85f * density
+                if (currentLayer != KeyboardLayer.NUMPAD) {
+                    val mx = rect.right - 7f * density
+                    val my = rect.top + 8f * density
+                    iconPaint.color = colorTextHint
+                    iconPaint.strokeWidth = 1.25f * density
+                    canvas.drawRoundRect(mx - 1.8f * density, my - 4.5f * density, mx + 1.8f * density, my + 0.5f * density, 1.8f * density, 1.8f * density, iconPaint)
+                    canvas.drawArc(mx - 3.6f * density, my - 2f * density, mx + 3.6f * density, my + 3f * density, 0f, 180f, false, iconPaint)
+                    iconPaint.strokeWidth = 1.85f * density
+                }
             }
             KeyType.PERIOD -> {
                 val yOff = (mainTextPaint.descent() + mainTextPaint.ascent()) / 2f
                 canvas.drawText(".", cx, cy - yOff + 2f * density, mainTextPaint)
             }
-            KeyType.MODE_SYMBOLS, KeyType.MODE_SYMBOLS_ALT -> {
+            KeyType.MODE_SYMBOLS, KeyType.MODE_SYMBOLS_ALT, KeyType.MODE_NUMPAD -> {
                 val yOff = (actionLabelPaint.descent() + actionLabelPaint.ascent()) / 2f
                 canvas.drawText(spec.label, cx, cy - yOff, actionLabelPaint)
             }
@@ -487,7 +621,6 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
 
                 val textHalf = spaceTextPaint.measureText(languageLabel) / 2f
                 iconFillPaint.color = colorTextMuted
-                // Left chevron
                 vectorPath.reset()
                 val lx = cx - textHalf - 11f * density
                 vectorPath.moveTo(lx - 3.5f * density, cy)
@@ -496,7 +629,6 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
                 vectorPath.close()
                 canvas.drawPath(vectorPath, iconFillPaint)
 
-                // Right chevron
                 vectorPath.reset()
                 val rx = cx + textHalf + 11f * density
                 vectorPath.moveTo(rx + 3.5f * density, cy)
@@ -505,7 +637,6 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
                 vectorPath.close()
                 canvas.drawPath(vectorPath, iconFillPaint)
 
-                // Globe icon at top-right of Spacebar
                 val gx = rect.right - 9f * density
                 val gy = rect.top + 8.5f * density
                 val gr = 4.8f * density
@@ -539,7 +670,6 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
                         canvas.drawLine(cx + 2.5f * density, cy + 5.5f * density, cx + 8f * density, cy, iconPaint)
                     }
                     else -> {
-                        // Return arrow
                         vectorPath.reset()
                         vectorPath.moveTo(cx + 7f * density, cy - 5f * density)
                         vectorPath.lineTo(cx + 7f * density, cy + 2f * density)
@@ -565,7 +695,6 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
                     handleToolbarTap(x)
                     return true
                 }
-                // Rollover flush: commit earlier pressed character key immediately
                 flushRolloverPointers(exceptPid = pid)
                 val hit = findKeyAt(x, y)
                 val slot = allocPointerSlot(pid)
@@ -630,15 +759,16 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
     private fun handleToolbarTap(x: Float) {
         performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
         if (activeUtilityPanel == UtilityPanel.CURSOR) {
-            for (i in 0 until 6) {
+            for (i in 0 until 7) {
                 if (utilityChipBounds[i].contains(x, toolbarHeightPx / 2f)) {
                     when (i) {
                         0 -> listener?.onCursorMove(KeyEvent.KEYCODE_DPAD_LEFT)
                         1 -> listener?.onCursorMove(KeyEvent.KEYCODE_DPAD_UP)
                         2 -> listener?.onCursorMove(KeyEvent.KEYCODE_DPAD_DOWN)
                         3 -> listener?.onCursorMove(KeyEvent.KEYCODE_DPAD_RIGHT)
-                        4 -> listener?.onCopy()
-                        5 -> {
+                        4 -> listener?.onSelectAll()
+                        5 -> listener?.onCopy()
+                        6 -> {
                             activeUtilityPanel = UtilityPanel.NONE
                             invalidateStaticLayer()
                         }
@@ -650,13 +780,59 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
         }
 
         if (activeUtilityPanel == UtilityPanel.CLIPBOARD) {
-            if (x > width - 50f * density) {
+            val history = listener?.getClipboardHistory().orEmpty()
+            if (suggestionChipBounds[3].contains(x, toolbarHeightPx / 2f)) {
                 activeUtilityPanel = UtilityPanel.NONE
-            } else {
-                listener?.onPasteClipboard()
-                activeUtilityPanel = UtilityPanel.NONE
+                invalidateStaticLayer()
+                return
             }
-            invalidateStaticLayer()
+            val count = history.size.coerceAtMost(3)
+            for (i in 0 until count) {
+                if (suggestionChipBounds[i].contains(x, toolbarHeightPx / 2f)) {
+                    listener?.onPasteText(history[i])
+                    activeUtilityPanel = UtilityPanel.NONE
+                    invalidateStaticLayer()
+                    return
+                }
+            }
+            return
+        }
+
+        if (activeSuggestions.isNotEmpty() && !suppressSuggestionsForWord) {
+            if (suggestionChipBounds[3].contains(x, toolbarHeightPx / 2f)) {
+                suppressSuggestionsForWord = true
+                invalidateStaticLayer()
+                return
+            }
+            for (i in activeSuggestions.indices) {
+                if (suggestionChipBounds[i].contains(x, toolbarHeightPx / 2f)) {
+                    listener?.onSuggestionPicked(activeSuggestions[i])
+                    activeSuggestions.clear()
+                    invalidateStaticLayer()
+                    return
+                }
+            }
+            return
+        }
+
+        if (isTerminalContext) {
+            for (i in 0 until 7) {
+                if (utilityChipBounds[i].contains(x, toolbarHeightPx / 2f)) {
+                    when (i) {
+                        0 -> listener?.onCursorMove(KeyEvent.KEYCODE_ESCAPE)
+                        1 -> listener?.onCursorMove(KeyEvent.KEYCODE_TAB)
+                        2 -> {
+                            isCtrlLatched = !isCtrlLatched
+                            invalidateStaticLayer()
+                        }
+                        3 -> listener?.onCommitText("|")
+                        4 -> listener?.onCommitText("/")
+                        5 -> listener?.onCommitText("~")
+                        6 -> listener?.onCommitText("-")
+                    }
+                    return
+                }
+            }
             return
         }
 
@@ -683,6 +859,12 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
     private fun executeKeyAction(spec: KeySpec) {
         when (spec.type) {
             KeyType.CHAR -> {
+                if (isCtrlLatched && spec.label.length == 1 && spec.label[0].isLetter()) {
+                    isCtrlLatched = false
+                    listener?.onCtrlChar(spec.label[0])
+                    invalidateStaticLayer()
+                    return
+                }
                 val out = if (currentLayer == KeyboardLayer.QWERTY && shiftState != ShiftState.OFF) {
                     spec.label.uppercase(Locale.ROOT)
                 } else {
@@ -696,7 +878,15 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
             }
             KeyType.COMMA -> listener?.onCommitText(",")
             KeyType.PERIOD -> listener?.onCommitText(".")
-            KeyType.SPACE -> listener?.onCommitText(" ")
+            KeyType.SPACE -> {
+                val now = SystemClock.uptimeMillis()
+                if (now - lastSpaceUpTimeMs <= 320L && listener?.onDoubleSpace() == true) {
+                    lastSpaceUpTimeMs = 0L
+                } else {
+                    lastSpaceUpTimeMs = now
+                    listener?.onCommitText(" ")
+                }
+            }
             KeyType.BACKSPACE -> listener?.onBackspace()
             KeyType.ENTER -> listener?.onEnter()
             KeyType.SHIFT -> {
@@ -707,7 +897,7 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
                 }
                 invalidateStaticLayer()
             }
-            KeyType.MODE_SYMBOLS -> {
+            KeyType.MODE_SYMBOLS, KeyType.MODE_NUMPAD -> {
                 currentLayer = if (currentLayer == KeyboardLayer.QWERTY) KeyboardLayer.SYMBOLS else KeyboardLayer.QWERTY
                 rebuildGeometry(width.toFloat())
                 invalidateStaticLayer()
@@ -753,6 +943,7 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
                 if (pointerKeys[slot] == kb && !pointerLongTriggered[slot]) {
                     pointerLongTriggered[slot] = true
                     performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                    invalidate()
                     listener?.onCommitText(kb.spec.longPressText)
                 }
             }

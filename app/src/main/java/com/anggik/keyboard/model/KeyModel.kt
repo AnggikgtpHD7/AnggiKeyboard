@@ -7,6 +7,7 @@ enum class KeyType {
     MODE_SYMBOLS,
     MODE_SYMBOLS_ALT,
     MODE_EMOJI,
+    MODE_NUMPAD,
     COMMA,
     SPACE,
     PERIOD,
@@ -17,7 +18,8 @@ enum class KeyboardLayer {
     QWERTY,
     SYMBOLS,
     SYMBOLS_ALT,
-    EMOJI
+    EMOJI,
+    NUMPAD
 }
 
 enum class ShiftState {
@@ -153,6 +155,25 @@ object KeyboardLayouts {
             KeySpec("English", type = KeyType.SPACE, weight = 3.38f),
             KeySpec(".", type = KeyType.PERIOD, weight = 1.0f),
             KeySpec("", type = KeyType.ENTER, weight = 1.38f)
+        )
+    )
+
+    val numpadRows: List<List<KeySpec>> = listOf(
+        listOf(
+            KeySpec("1"), KeySpec("2"), KeySpec("3"), KeySpec("-", type = KeyType.MODE_SYMBOLS)
+        ),
+        listOf(
+            KeySpec("4"), KeySpec("5"), KeySpec("6"), KeySpec("+")
+        ),
+        listOf(
+            KeySpec("7"), KeySpec("8"), KeySpec("9"), KeySpec("", type = KeyType.BACKSPACE)
+        ),
+        listOf(
+            KeySpec("ABC", type = KeyType.MODE_SYMBOLS, weight = 1.0f),
+            KeySpec(",", type = KeyType.COMMA, weight = 0.8f),
+            KeySpec("0", weight = 1.4f),
+            KeySpec(".", type = KeyType.PERIOD, weight = 0.8f),
+            KeySpec("", type = KeyType.ENTER, weight = 1.0f)
         )
     )
 }
