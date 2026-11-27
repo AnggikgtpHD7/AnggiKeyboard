@@ -20,6 +20,11 @@ import com.anggik.keyboard.service.AnggiKeyboardService
 class SetupActivity : Activity() {
 
     private lateinit var statusView: TextView
+    private lateinit var prefSummaryView: TextView
+
+    private val devicePrefs by lazy {
+        createDeviceProtectedStorageContext().getSharedPreferences("anggi_kb_state", Context.MODE_PRIVATE)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,7 +55,13 @@ class SetupActivity : Activity() {
         statusView = TextView(this).apply {
             textSize = 13.5f
             setTextColor(0xFF4B504D.toInt())
-            setPadding(0, (10 * dp).toInt(), 0, (14 * dp).toInt())
+            setPadding(0, (8 * dp).toInt(), 0, (10 * dp).toInt())
+        }
+
+        prefSummaryView = TextView(this).apply {
+            textSize = 13f
+            setTextColor(0xFF121413.toInt())
+            setPadding(0, 0, 0, (10 * dp).toInt())
         }
 
         val btnEnable = Button(this).apply {
@@ -68,8 +79,40 @@ class SetupActivity : Activity() {
             }
         }
 
+        val btnTheme = Button(this).apply {
+            text = "3. Ganti Tema (Mint Light / AMOLED Black)"
+            setOnClickListener {
+                val next = !devicePrefs.getBoolean("amoled_dark", false)
+                devicePrefs.edit().putBoolean("amoled_dark", next).apply()
+                refreshPrefSummary()
+            }
+        }
+
+        val btnScale = Button(this).apply {
+            text = "4. Siklus Tinggi Tombol (90% / 100% / 110%)"
+            setOnClickListener {
+                val cur = devicePrefs.getFloat("height_scale", 1.0f)
+                val next = when {
+                    cur < 0.95f -> 1.0f
+                    cur < 1.05f -> 1.1f
+                    else -> 0.9f
+                }
+                devicePrefs.edit().putFloat("height_scale", next).apply()
+                refreshPrefSummary()
+            }
+        }
+
+        val btnHaptic = Button(this).apply {
+            text = "5. Toggle Getaran Haptik"
+            setOnClickListener {
+                val next = !devicePrefs.getBoolean("haptic_enabled", true)
+                devicePrefs.edit().putBoolean("haptic_enabled", next).apply()
+                refreshPrefSummary()
+            }
+        }
+
         val testText = EditText(this).apply {
-            hint = "Uji ketik QWERTY, prediksi kata & spasi ganda..."
+            hint = "Uji ketik, swipe/glide typing & prediksi kata..."
             gravity = Gravity.TOP or Gravity.START
             minLines = 2
             setBackgroundColor(0xFFFFFFFF.toInt())
@@ -86,15 +129,27 @@ class SetupActivity : Activity() {
         val gapLp = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { topMargin = (10 * dp).toInt() }
+        ).apply { topMargin = (8 * dp).toInt() }
 
         root.addView(title)
         root.addView(statusView)
+        root.addView(prefSummaryView)
         root.addView(btnEnable)
         root.addView(btnSelect)
+        root.addView(btnTheme)
+        root.addView(btnScale)
+        root.addView(btnHaptic)
         root.addView(testText, gapLp)
         root.addView(testNumber, gapLp)
         setContentView(root)
+        refreshPrefSummary()
+    }
+
+    private fun refreshPrefSummary() {
+        val amoled = devicePrefs.getBoolean("amoled_dark", false)
+        val scale = (devicePrefs.getFloat("height_scale", 1.0f) * 100).toInt()
+        val haptic = devicePrefs.getBoolean("haptic_enabled", true)
+        prefSummaryView.text = "Tema: ${if (amoled) "AMOLED True Black" else "Mint Light"} | Skala Tinggi: ${scale}% | Haptik: ${if (haptic) "ON" else "OFF"}"
     }
 
     override fun onResume() {
@@ -104,5 +159,6 @@ class SetupActivity : Activity() {
         val enabled = imm.enabledInputMethodList.any { it.id == targetId }
         val defaultIme = Settings.Secure.getString(contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD)
         statusView.text = "IME ID: $targetId\nTerdaftar: ${if (enabled) "AKTIF" else "BELUM"}\nDefault Aktif: ${defaultIme ?: "-"}"
+        refreshPrefSummary()
     }
 }

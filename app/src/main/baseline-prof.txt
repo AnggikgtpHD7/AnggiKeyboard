@@ -5,3 +5,4 @@ HSPLcom/anggik/keyboard/ui/AcceleratedKeyboardSurface;->onTouchEvent(Landroid/vi
 HSPLcom/anggik/keyboard/ui/AcceleratedKeyboardSurface;->onDraw(Landroid/graphics/Canvas;)V
 HSPLcom/anggik/keyboard/engine/FastInputDispatcher;->commitText(Ljava/lang/CharSequence;Landroid/view/inputmethod/InputConnection;)V
 HSPLcom/anggik/keyboard/engine/LocalWordPredictor;->suggest(Ljava/lang/String;ZLjava/util/List;)V
+HSPLcom/anggik/keyboard/engine/GlideTypingEngine;->decodeTrajectory([F[FICCZLcom/anggik/keyboard/engine/LocalWordPredictor;ZLjava/util/List;)Ljava/lang/String;

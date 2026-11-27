@@ -47,6 +47,10 @@ class LocalWordPredictor {
 
     private val learnedWords = ArrayList<String>(64)
 
+    fun getLexicon(isIndonesian: Boolean): Array<String> = if (isIndonesian) idLexicon else enLexicon
+
+    fun getLearnedWords(): List<String> = learnedWords
+
     fun learnWord(rawWord: String, allowLearn: Boolean) {
         if (!allowLearn) return
         val clean = rawWord.trim().lowercase(Locale.ROOT)
@@ -74,7 +78,7 @@ class LocalWordPredictor {
             }
         }
 
-        val dict = if (isIndonesian) idLexicon else enLexicon
+        val dict = getLexicon(isIndonesian)
         var lo = 0
         var hi = dict.size - 1
         var firstIdx = dict.size

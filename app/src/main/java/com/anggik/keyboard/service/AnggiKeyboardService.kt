@@ -4,15 +4,23 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.inputmethodservice.InputMethodService
 import android.os.Build
+import android.os.Bundle
 import android.text.InputType
+import android.view.Gravity
 import android.view.View
 import android.view.WindowInsets
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InlineSuggestionsRequest
+import android.view.inputmethod.InlineSuggestionsResponse
 import android.view.inputmethod.InputMethodManager
 import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
+import android.widget.LinearLayout
 import com.anggik.keyboard.engine.FastInputDispatcher
+import com.anggik.keyboard.engine.InlineAutofillHelper
 import com.anggik.keyboard.engine.LocalWordPredictor
 import com.anggik.keyboard.ui.AcceleratedKeyboardSurface
+import java.util.Locale
 
 class AnggiKeyboardService : InputMethodService(), AcceleratedKeyboardSurface.Listener {
 
@@ -23,6 +31,9 @@ class AnggiKeyboardService : InputMethodService(), AcceleratedKeyboardSurface.Li
 
     private var rootContainer: FrameLayout? = null
     private var keyboardSurface: AcceleratedKeyboardSurface? = null
+    private var inlineScrollBar: HorizontalScrollView? = null
+    private var inlineChipContainer: LinearLayout? = null
+
     private var isIndonesian = false
     private var isSensitiveInput = false
     private var lastTrackedWord = ""
@@ -50,13 +61,39 @@ class AnggiKeyboardService : InputMethodService(), AcceleratedKeyboardSurface.Li
     }
 
     override fun onCreateInputView(): View {
+        val amoled = devicePrefs.getBoolean("amoled_dark", false)
+        val scale = devicePrefs.getFloat("height_scale", 1.0f)
+        val haptic = devicePrefs.getBoolean("haptic_enabled", true)
+        val toolbarPx = (42f * resources.displayMetrics.density).toInt()
+
         val container = FrameLayout(this).apply {
-            setBackgroundColor(0xFFEFF2F0.toInt())
+            setBackgroundColor(if (amoled) 0xFF000000.toInt() else 0xFFEFF2F0.toInt())
         }
+
         val surface = AcceleratedKeyboardSurface(this).apply {
             listener = this@AnggiKeyboardService
             setLanguageName(if (isIndonesian) "Indonesia" else "English")
+            applyVisualConfig(amoled, scale, haptic)
         }
+
+        val chipRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val autofillScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            visibility = View.GONE
+            setBackgroundColor(if (amoled) 0xFF000000.toInt() else 0xFFEFF2F0.toInt())
+            addView(
+                chipRow,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+            )
+        }
+
         container.addView(
             surface,
             FrameLayout.LayoutParams(
@@ -64,14 +101,35 @@ class AnggiKeyboardService : InputMethodService(), AcceleratedKeyboardSurface.Li
                 FrameLayout.LayoutParams.WRAP_CONTENT
             )
         )
+        container.addView(
+            autofillScroll,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                toolbarPx,
+                Gravity.TOP
+            )
+        )
+
         applyUniversalInsets(container)
         rootContainer = container
         keyboardSurface = surface
+        inlineScrollBar = autofillScroll
+        inlineChipContainer = chipRow
         return container
     }
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
+        hideInlineAutofillBar()
+
+        val amoled = devicePrefs.getBoolean("amoled_dark", false)
+        val scale = devicePrefs.getFloat("height_scale", 1.0f)
+        val haptic = devicePrefs.getBoolean("haptic_enabled", true)
+        val bg = if (amoled) 0xFF000000.toInt() else 0xFFEFF2F0.toInt()
+        rootContainer?.setBackgroundColor(bg)
+        inlineScrollBar?.setBackgroundColor(bg)
+        keyboardSurface?.applyVisualConfig(amoled, scale, haptic)
+
         val inputType = info?.inputType ?: 0
         val inputClass = inputType and InputType.TYPE_MASK_CLASS
         val variation = inputType and InputType.TYPE_MASK_VARIATION
@@ -93,6 +151,27 @@ class AnggiKeyboardService : InputMethodService(), AcceleratedKeyboardSurface.Li
 
         keyboardSurface?.setContextProfile(useNumpad, isTermux, action)
         refreshSuggestionsAndCaps(info)
+    }
+
+    override fun onCreateInlineSuggestionsRequest(uiExtras: Bundle): InlineSuggestionsRequest? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
+        val toolbarPx = (42f * resources.displayMetrics.density).toInt()
+        return InlineAutofillHelper.buildRequest(toolbarPx)
+    }
+
+    override fun onInlineSuggestionsResponse(response: InlineSuggestionsResponse): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return false
+        val container = inlineChipContainer ?: return false
+        val toolbarPx = (42f * resources.displayMetrics.density).toInt()
+        InlineAutofillHelper.populateSuggestions(this, response, toolbarPx, container) { visible ->
+            inlineScrollBar?.visibility = if (visible) View.VISIBLE else View.GONE
+        }
+        return true
+    }
+
+    private fun hideInlineAutofillBar() {
+        inlineScrollBar?.visibility = View.GONE
+        inlineChipContainer?.removeAllViews()
     }
 
     override fun onUpdateSelection(
@@ -162,7 +241,31 @@ class AnggiKeyboardService : InputMethodService(), AcceleratedKeyboardSurface.Li
     }
 
     override fun onCommitText(text: CharSequence) {
+        hideInlineAutofillBar()
         dispatcher.commitText(text, currentInputConnection)
+    }
+
+    override fun onGlideTrajectory(
+        xs: FloatArray,
+        ys: FloatArray,
+        count: Int,
+        startChar: Char,
+        endChar: Char,
+        isShifted: Boolean
+    ) {
+        hideInlineAutofillBar()
+        val surface = keyboardSurface ?: return
+        val matched = surface.glideEngine.decodeTrajectory(
+            xs, ys, count, startChar, endChar, predictor, isIndonesian, suggestionBuffer
+        ) ?: return
+        val formatted = if (isShifted) {
+            matched.replaceFirstChar { it.uppercaseChar() }
+        } else {
+            matched
+        }
+        predictor.learnWord(matched, !isSensitiveInput)
+        dispatcher.commitText("$formatted ", currentInputConnection)
+        surface.setSuggestions(suggestionBuffer)
     }
 
     override fun onCtrlChar(ch: Char) {
@@ -185,6 +288,7 @@ class AnggiKeyboardService : InputMethodService(), AcceleratedKeyboardSurface.Li
     }
 
     override fun onBackspace() {
+        hideInlineAutofillBar()
         dispatcher.sendBackspace(currentInputConnection)
     }
 
@@ -232,9 +336,5 @@ class AnggiKeyboardService : InputMethodService(), AcceleratedKeyboardSurface.Li
     override fun getClipboardHistory(): List<String> {
         if (isSensitiveInput) return emptyList()
         return clipboardRing.toList()
-    }
-
-    override fun clearClipboardHistory() {
-        clipboardRing.clear()
     }
 }

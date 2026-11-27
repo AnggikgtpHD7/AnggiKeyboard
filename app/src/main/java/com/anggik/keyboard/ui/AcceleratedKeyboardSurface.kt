@@ -18,6 +18,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.inputmethod.EditorInfo
+import com.anggik.keyboard.engine.GlideTypingEngine
 import com.anggik.keyboard.model.KeySpec
 import com.anggik.keyboard.model.KeyType
 import com.anggik.keyboard.model.KeyboardLayer
@@ -25,11 +26,13 @@ import com.anggik.keyboard.model.KeyboardLayouts
 import com.anggik.keyboard.model.ShiftState
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.hypot
 
 class AcceleratedKeyboardSurface(context: Context) : View(context) {
 
     interface Listener {
         fun onCommitText(text: CharSequence)
+        fun onGlideTrajectory(xs: FloatArray, ys: FloatArray, count: Int, startChar: Char, endChar: Char, isShifted: Boolean)
         fun onCtrlChar(ch: Char)
         fun onDoubleSpace(): Boolean
         fun onSuggestionPicked(word: String)
@@ -43,29 +46,34 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
         fun onCopy()
         fun onPasteText(text: String)
         fun getClipboardHistory(): List<String>
-        fun clearClipboardHistory()
     }
 
     var listener: Listener? = null
+    val glideEngine = GlideTypingEngine()
 
     private val density = resources.displayMetrics.density
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
 
-    // Exact colors from reference UI
-    private val colorBg = 0xFFEFF2F0.toInt()
-    private val colorKeyWhite = 0xFFFFFFFF.toInt()
-    private val colorKeyMint = 0xFFD1E4D4.toInt()
-    private val colorKeyEnter = 0xFF75C18A.toInt()
-    private val colorKeyPressed = 0xFFC2D6C6.toInt()
-    private val colorKeyShadow = 0xFFD2D7D4.toInt()
-    private val colorDivider = 0xFFDCE1DE.toInt()
-    private val colorTextPrimary = 0xFF121413.toInt()
-    private val colorTextHint = 0xFF4B504D.toInt()
-    private val colorTextMuted = 0xFF9AA09D.toInt()
-    private val colorMicDisabled = 0xFFB0B5B2.toInt()
+    // Dynamic palette (Mint Light default vs AMOLED True Black)
+    private var colorBg = 0xFFEFF2F0.toInt()
+    private var colorKeyWhite = 0xFFFFFFFF.toInt()
+    private var colorKeyMint = 0xFFD1E4D4.toInt()
+    private var colorKeyEnter = 0xFF75C18A.toInt()
+    private var colorKeyPressed = 0xFFC2D6C6.toInt()
+    private var colorKeyShadow = 0xFFD2D7D4.toInt()
+    private var colorDivider = 0xFFDCE1DE.toInt()
+    private var colorTextPrimary = 0xFF121413.toInt()
+    private var colorTextHint = 0xFF4B504D.toInt()
+    private var colorTextMuted = 0xFF9AA09D.toInt()
+    private var colorMicDisabled = 0xFFB0B5B2.toInt()
+    private var colorGlideTrail = 0xAA46A363.toInt()
+
+    private var heightScale = 1.0f
+    private var hapticEnabled = true
+    private var isAmoledDark = false
 
     private val toolbarHeightPx = 42f * density
-    private val keyHeightPx = 47f * density
+    private val baseKeyHeightPx = 47f * density
     private val rowGapPx = 7f * density
     private val colGapPx = 5.5f * density
     private val outerPadXPx = 4f * density
@@ -74,54 +82,51 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
     private val keyCornerPx = 6.5f * density
     private val shadowOffsetPx = 1.5f * density
 
-    private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = colorBg }
-    private val dividerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = colorDivider
-        strokeWidth = 1f * density
-    }
+    private fun currentKeyHeight(): Float = baseKeyHeightPx * heightScale
+
+    private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val dividerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = 1f * density }
     private val keyFillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val keyShadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = colorKeyShadow }
+    private val keyShadowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val bubbleBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = colorKeyShadow
         style = Paint.Style.STROKE
         strokeWidth = 1.2f * density
     }
+    private val glideTrailPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 4.2f * density
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
 
     private val mainTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = colorTextPrimary
         textAlign = Paint.Align.CENTER
         typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
     }
     private val bubbleTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = colorTextPrimary
         textAlign = Paint.Align.CENTER
         typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
         textSize = 27f * density
     }
     private val actionLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = colorTextPrimary
         textAlign = Paint.Align.CENTER
         typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
     }
     private val hintTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = colorTextHint
         textAlign = Paint.Align.RIGHT
         typeface = Typeface.create("sans-serif", Typeface.NORMAL)
     }
     private val spaceTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = colorTextPrimary
         textAlign = Paint.Align.CENTER
         typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
     }
     private val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = colorTextPrimary
         style = Paint.Style.STROKE
         strokeWidth = 1.85f * density
         strokeCap = Paint.Cap.ROUND
         strokeJoin = Paint.Join.ROUND
     }
     private val iconFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = colorTextPrimary
         style = Paint.Style.FILL
     }
 
@@ -146,6 +151,7 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
     private val tempRect = RectF()
     private val bubbleRect = RectF()
     private val vectorPath = Path()
+    private val glidePath = Path()
 
     private var staticNode: Any? = null
     private var fallbackBitmap: Bitmap? = null
@@ -155,8 +161,17 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
     private val pointerIds = IntArray(5) { MotionEvent.INVALID_POINTER_ID }
     private val pointerKeys = Array<KeyBound?>(5) { null }
     private val pointerDownX = FloatArray(5)
+    private val pointerDownY = FloatArray(5)
     private val pointerLastDragX = FloatArray(5)
     private val pointerLongTriggered = BooleanArray(5)
+
+    // Glide gesture buffer (64 points, zero allocation)
+    private val glideXs = FloatArray(64)
+    private val glideYs = FloatArray(64)
+    private var glideCount = 0
+    private var glideActivePid = MotionEvent.INVALID_POINTER_ID
+    private var glideStartChar = '\u0000'
+    private var isGliding = false
 
     private var lastSpaceUpTimeMs = 0L
 
@@ -166,11 +181,65 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
 
     init {
         isHapticFeedbackEnabled = true
+        applyVisualConfig(amoledDark = false, scale = 1.0f, haptic = true)
+    }
+
+    fun applyVisualConfig(amoledDark: Boolean, scale: Float, haptic: Boolean) {
+        val clampedScale = scale.coerceIn(0.85f, 1.20f)
+        val scaleChanged = abs(heightScale - clampedScale) > 0.001f
+        isAmoledDark = amoledDark
+        heightScale = clampedScale
+        hapticEnabled = haptic
+
+        if (amoledDark) {
+            colorBg = 0xFF000000.toInt()
+            colorKeyWhite = 0xFF1A1E1C.toInt()
+            colorKeyMint = 0xFF162C1E.toInt()
+            colorKeyEnter = 0xFF2E8B57.toInt()
+            colorKeyPressed = 0xFF2B3E32.toInt()
+            colorKeyShadow = 0xFF0A0C0B.toInt()
+            colorDivider = 0xFF1F2421.toInt()
+            colorTextPrimary = 0xFFF1F5F2.toInt()
+            colorTextHint = 0xFF95A39B.toInt()
+            colorTextMuted = 0xFF6B7770.toInt()
+            colorMicDisabled = 0xFF5A635E.toInt()
+            colorGlideTrail = 0xCC49C474.toInt()
+        } else {
+            colorBg = 0xFFEFF2F0.toInt()
+            colorKeyWhite = 0xFFFFFFFF.toInt()
+            colorKeyMint = 0xFFD1E4D4.toInt()
+            colorKeyEnter = 0xFF75C18A.toInt()
+            colorKeyPressed = 0xFFC2D6C6.toInt()
+            colorKeyShadow = 0xFFD2D7D4.toInt()
+            colorDivider = 0xFFDCE1DE.toInt()
+            colorTextPrimary = 0xFF121413.toInt()
+            colorTextHint = 0xFF4B504D.toInt()
+            colorTextMuted = 0xFF9AA09D.toInt()
+            colorMicDisabled = 0xFFB0B5B2.toInt()
+            colorGlideTrail = 0xAA46A363.toInt()
+        }
+
+        bgPaint.color = colorBg
+        dividerPaint.color = colorDivider
+        keyShadowPaint.color = colorKeyShadow
+        bubbleBorderPaint.color = colorKeyShadow
+        glideTrailPaint.color = colorGlideTrail
+        mainTextPaint.color = colorTextPrimary
+        bubbleTextPaint.color = colorTextPrimary
+        actionLabelPaint.color = colorTextPrimary
+        hintTextPaint.color = colorTextHint
+        spaceTextPaint.color = colorTextPrimary
+
+        if (scaleChanged) {
+            requestLayout()
+            if (width > 0) rebuildGeometry(width.toFloat())
+        }
+        invalidateStaticLayer()
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val w = MeasureSpec.getSize(widthMeasureSpec)
-        val totalHeight = (toolbarHeightPx + outerPadTopPx + (4 * keyHeightPx) + (3 * rowGapPx) + outerPadBottomPx).toInt()
+        val totalHeight = (toolbarHeightPx + outerPadTopPx + (4 * currentKeyHeight()) + (3 * rowGapPx) + outerPadBottomPx).toInt()
         setMeasuredDimension(w, totalHeight)
     }
 
@@ -234,6 +303,12 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
         invalidate()
     }
 
+    private fun triggerHaptic(type: Int) {
+        if (hapticEnabled) {
+            performHapticFeedback(type)
+        }
+    }
+
     private fun activeRows(): List<List<KeySpec>> = when (currentLayer) {
         KeyboardLayer.QWERTY -> KeyboardLayouts.qwertyRows
         KeyboardLayer.SYMBOLS -> KeyboardLayouts.symbolsRows
@@ -246,21 +321,18 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
         if (totalWidth <= 0f) return
         keyBounds.clear()
 
-        // Default toolbar 4 slots: [0]=Grid, [1]=Clipboard, [2]=Mic, [3]=Search/Cursor
         val slotW = totalWidth / 6f
         toolbarBounds[0].set(0f, 0f, slotW, toolbarHeightPx)
         toolbarBounds[1].set(slotW, 0f, slotW * 2f, toolbarHeightPx)
         toolbarBounds[2].set(slotW * 2f, 0f, slotW * 3f, toolbarHeightPx)
         toolbarBounds[3].set(totalWidth - slotW, 0f, totalWidth, toolbarHeightPx)
 
-        // 7-slot utility / Termux bar
         val chipW = (totalWidth - (8 * colGapPx)) / 7f
         for (i in 0 until 7) {
             val left = colGapPx + i * (chipW + colGapPx)
             utilityChipBounds[i].set(left, 5f * density, left + chipW, toolbarHeightPx - 5f * density)
         }
 
-        // 3 suggestion chips + 1 dismiss button
         val dismissW = 34f * density
         val sugAreaW = totalWidth - dismissW - (5 * colGapPx)
         val sugW = sugAreaW / 3f
@@ -272,6 +344,7 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
 
         val rows = activeRows()
         val usableWidth = totalWidth - (2f * outerPadXPx)
+        val kh = currentKeyHeight()
         var y = toolbarHeightPx + outerPadTopPx
 
         for (r in rows.indices) {
@@ -285,10 +358,14 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
             for (c in rowKeys.indices) {
                 val spec = rowKeys[c]
                 val kw = unitWidth * spec.weight
-                keyBounds.add(KeyBound(r, c, spec, RectF(x, y, x + kw, y + keyHeightPx)))
+                val rect = RectF(x, y, x + kw, y + kh)
+                keyBounds.add(KeyBound(r, c, spec, rect))
+                if (currentLayer == KeyboardLayer.QWERTY && spec.type == KeyType.CHAR && spec.label.length == 1) {
+                    glideEngine.updateKeyGeometry(spec.label[0], rect.centerX(), rect.centerY(), unitWidth)
+                }
                 x += kw + colGapPx
             }
-            y += keyHeightPx + rowGapPx
+            y += kh + rowGapPx
         }
     }
 
@@ -337,6 +414,16 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
     }
 
     private fun drawActivePressOverlay(canvas: Canvas) {
+        if (isGliding && glideCount >= 2) {
+            glidePath.reset()
+            glidePath.moveTo(glideXs[0], glideYs[0])
+            for (i in 1 until glideCount) {
+                glidePath.lineTo(glideXs[i], glideYs[i])
+            }
+            canvas.drawPath(glidePath, glideTrailPaint)
+            return
+        }
+
         for (i in pointerKeys.indices) {
             val kb = pointerKeys[i] ?: continue
             drawKeyCap(canvas, kb, isPressed = true)
@@ -382,7 +469,6 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
         canvas.drawLine(0f, toolbarHeightPx, width.toFloat(), toolbarHeightPx, dividerPaint)
         val yOff = (spaceTextPaint.descent() + spaceTextPaint.ascent()) / 2f
 
-        // 1. Cursor Navigation Strip
         if (activeUtilityPanel == UtilityPanel.CURSOR) {
             val labels = arrayOf("◄", "▲", "▼", "►", "All", "Copy", "✕")
             for (i in 0 until 7) {
@@ -394,7 +480,6 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
             return
         }
 
-        // 2. Multi-Clip History Strip
         if (activeUtilityPanel == UtilityPanel.CLIPBOARD) {
             val history = listener?.getClipboardHistory().orEmpty()
             if (history.isEmpty()) {
@@ -423,7 +508,6 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
             return
         }
 
-        // 3. Active Word Suggestions Strip
         if (activeSuggestions.isNotEmpty() && !suppressSuggestionsForWord) {
             for (i in activeSuggestions.indices) {
                 val r = suggestionChipBounds[i]
@@ -438,7 +522,6 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
             return
         }
 
-        // 4. Termux Quick-Key Bar
         if (isTerminalContext) {
             val termKeys = arrayOf("ESC", "TAB", "CTRL", "|", "/", "~", "-")
             for (i in 0 until 7) {
@@ -450,7 +533,6 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
             return
         }
 
-        // 5. Default 4-Icon Utility Toolbar
         run {
             val cx = toolbarBounds[0].centerX()
             val cy = toolbarBounds[0].centerY()
@@ -695,16 +777,33 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
                     handleToolbarTap(x)
                     return true
                 }
+                if (event.actionMasked == MotionEvent.ACTION_POINTER_DOWN && isGliding) {
+                    resetGlideState()
+                }
                 flushRolloverPointers(exceptPid = pid)
                 val hit = findKeyAt(x, y)
                 val slot = allocPointerSlot(pid)
                 if (slot != -1 && hit != null) {
                     pointerKeys[slot] = hit
                     pointerDownX[slot] = x
+                    pointerDownY[slot] = y
                     pointerLastDragX[slot] = x
                     pointerLongTriggered[slot] = false
-                    performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    triggerHaptic(HapticFeedbackConstants.KEYBOARD_TAP)
                     scheduleLongOrRepeat(slot, hit)
+
+                    if (event.actionMasked == MotionEvent.ACTION_DOWN &&
+                        currentLayer == KeyboardLayer.QWERTY &&
+                        hit.spec.type == KeyType.CHAR &&
+                        hit.spec.label.length == 1
+                    ) {
+                        glideActivePid = pid
+                        glideStartChar = hit.spec.label[0]
+                        glideXs[0] = x
+                        glideYs[0] = y
+                        glideCount = 1
+                        isGliding = false
+                    }
                     invalidate()
                 }
             }
@@ -715,7 +814,25 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
                     if (slot == -1) continue
                     val kb = pointerKeys[slot] ?: continue
                     val curX = event.getX(p)
-                    if (kb.spec.type == KeyType.SPACE) {
+                    val curY = event.getY(p)
+
+                    if (mPid == glideActivePid && currentLayer == KeyboardLayer.QWERTY && kb.spec.type == KeyType.CHAR) {
+                        val distFromOrigin = hypot(curX - pointerDownX[slot], curY - pointerDownY[slot])
+                        if (!isGliding && distFromOrigin > touchSlop * 1.9f && !pointerLongTriggered[slot]) {
+                            cancelTimers()
+                            isGliding = true
+                        }
+                        if (isGliding && glideCount < glideXs.size) {
+                            val prevX = glideXs[glideCount - 1]
+                            val prevY = glideYs[glideCount - 1]
+                            if (hypot(curX - prevX, curY - prevY) >= 6f * density) {
+                                glideXs[glideCount] = curX
+                                glideYs[glideCount] = curY
+                                glideCount++
+                                invalidate()
+                            }
+                        }
+                    } else if (kb.spec.type == KeyType.SPACE) {
                         val delta = curX - pointerLastDragX[slot]
                         val stepPx = 11f * density
                         if (abs(delta) >= stepPx) {
@@ -741,6 +858,28 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
                     val kb = pointerKeys[slot]
                     val wasLong = pointerLongTriggered[slot]
                     releaseSlot(slot)
+
+                    if (pid == glideActivePid && isGliding) {
+                        val endHit = findKeyAt(x, y)
+                        val endChar = if (endHit != null && endHit.spec.type == KeyType.CHAR && endHit.spec.label.length == 1) {
+                            endHit.spec.label[0]
+                        } else {
+                            glideStartChar
+                        }
+                        val wasShifted = shiftState != ShiftState.OFF
+                        listener?.onGlideTrajectory(glideXs, glideYs, glideCount, glideStartChar, endChar, wasShifted)
+                        if (shiftState == ShiftState.SHIFTED) {
+                            shiftState = ShiftState.OFF
+                            invalidateStaticLayer()
+                        }
+                        resetGlideState()
+                        invalidate()
+                        return true
+                    }
+
+                    if (pid == glideActivePid) {
+                        resetGlideState()
+                    }
                     if (kb != null && !wasLong) {
                         executeKeyAction(kb.spec)
                     }
@@ -749,6 +888,7 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
             }
             MotionEvent.ACTION_CANCEL -> {
                 cancelTimers()
+                resetGlideState()
                 for (i in pointerIds.indices) releaseSlot(i)
                 invalidate()
             }
@@ -756,8 +896,14 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
         return true
     }
 
+    private fun resetGlideState() {
+        glideActivePid = MotionEvent.INVALID_POINTER_ID
+        glideCount = 0
+        isGliding = false
+    }
+
     private fun handleToolbarTap(x: Float) {
-        performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+        triggerHaptic(HapticFeedbackConstants.KEYBOARD_TAP)
         if (activeUtilityPanel == UtilityPanel.CURSOR) {
             for (i in 0 until 7) {
                 if (utilityChipBounds[i].contains(x, toolbarHeightPx / 2f)) {
@@ -942,7 +1088,7 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
             val lp = Runnable {
                 if (pointerKeys[slot] == kb && !pointerLongTriggered[slot]) {
                     pointerLongTriggered[slot] = true
-                    performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                    triggerHaptic(HapticFeedbackConstants.LONG_PRESS)
                     invalidate()
                     listener?.onCommitText(kb.spec.longPressText)
                 }
