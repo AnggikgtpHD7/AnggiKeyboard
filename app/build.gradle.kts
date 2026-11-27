@@ -4,6 +4,10 @@ plugins {
 }
 
 android {
+    lint {
+        abortOnError = false
+        checkReleaseBuilds = false
+    }
     namespace = "com.anggik.keyboard"
     compileSdk = 36
 

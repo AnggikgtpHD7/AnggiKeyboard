@@ -76,21 +76,22 @@ class SetupActivity : Activity() {
         refreshSystemStatus()
     }
 
+    @Suppress("DEPRECATION")
     private fun rebuildSettingsUi() {
         val amoled = devicePrefs.getBoolean("amoled_dark", false)
         val palette = SettingsPalette.fromMode(amoled)
         window.statusBarColor = palette.bgCanvas
         window.navigationBarColor = palette.bgCanvas
 
-        val padH = UiKit.dp(this, 14f)
-        val padV = UiKit.dp(this, 12f)
+        val padH = UiKit.dp(this@SetupActivity, 14f)
+        val padV = UiKit.dp(this@SetupActivity, 12f)
 
-        val scroll = ScrollView(this).apply {
+        val scroll = ScrollView(this@SetupActivity).apply {
             isVerticalScrollBarEnabled = false
             setBackgroundColor(palette.bgCanvas)
         }
 
-        val content = LinearLayout(this).apply {
+        val content = LinearLayout(this@SetupActivity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(padH, padV, padH, padV)
         }
@@ -104,31 +105,36 @@ class SetupActivity : Activity() {
                     padH + bars.left,
                     padV + bars.top,
                     padH + bars.right,
-                    padV + bars.bottom + UiKit.dp(this, 12f)
+                    padV + bars.bottom + UiKit.dp(this@SetupActivity, 12f)
                 )
                 insets
             }
         }
 
         // --- COMPACT HEADER ---
-        val headerRow = LinearLayout(this).apply {
+        val headerRow = LinearLayout(this@SetupActivity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(UiKit.dp(this, 2f), UiKit.dp(this, 2f), UiKit.dp(this, 2f), UiKit.dp(this, 8f))
+            setPadding(
+                UiKit.dp(this@SetupActivity, 2f),
+                UiKit.dp(this@SetupActivity, 2f),
+                UiKit.dp(this@SetupActivity, 2f),
+                UiKit.dp(this@SetupActivity, 8f)
+            )
         }
 
-        val titleCol = LinearLayout(this).apply {
+        val titleCol = LinearLayout(this@SetupActivity).apply {
             orientation = LinearLayout.VERTICAL
         }
 
-        val appTitle = TextView(this).apply {
+        val appTitle = TextView(this@SetupActivity).apply {
             text = "AnggiKeyboard"
             textSize = 20f
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
             setTextColor(palette.textPrimary)
         }
 
-        val appSub = TextView(this).apply {
+        val appSub = TextView(this@SetupActivity).apply {
             text = "Universal Canvas IME • API 26–36"
             textSize = 12f
             setTextColor(palette.textSecondary)
@@ -137,10 +143,15 @@ class SetupActivity : Activity() {
         titleCol.addView(appTitle)
         titleCol.addView(appSub)
 
-        val badge = TextView(this).apply {
+        val badge = TextView(this@SetupActivity).apply {
             textSize = 11f
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-            setPadding(UiKit.dp(this, 10f), UiKit.dp(this, 5f), UiKit.dp(this, 10f), UiKit.dp(this, 5f))
+            setPadding(
+                UiKit.dp(this@SetupActivity, 10f),
+                UiKit.dp(this@SetupActivity, 5f),
+                UiKit.dp(this@SetupActivity, 10f),
+                UiKit.dp(this@SetupActivity, 5f)
+            )
         }
         statusBadgeView = badge
 
@@ -149,16 +160,16 @@ class SetupActivity : Activity() {
         content.addView(headerRow)
 
         // --- CARD 1: AKTIVASI SISTEM ---
-        val activationCard = UiKit.bentoCard(this, palette)
-        val detailTv = TextView(this).apply {
+        val activationCard = UiKit.bentoCard(this@SetupActivity, palette)
+        val detailTv = TextView(this@SetupActivity).apply {
             textSize = 12f
             setTextColor(palette.textSecondary)
-            setPadding(0, 0, 0, UiKit.dp(this, 10f))
+            setPadding(0, 0, 0, UiKit.dp(this@SetupActivity, 10f))
         }
         statusDetailView = detailTv
         activationCard.addView(detailTv)
 
-        val actionBtnRow = LinearLayout(this).apply {
+        val actionBtnRow = LinearLayout(this@SetupActivity).apply {
             orientation = LinearLayout.HORIZONTAL
         }
 
@@ -197,17 +208,16 @@ class SetupActivity : Activity() {
         content.addView(activationCard)
 
         // --- CARD 2: TAMPILAN & ERGONOMI ---
-        content.addView(UiKit.sectionLabel(this, "Tampilan & Ergonomi", palette))
-        val visualCard = UiKit.bentoCard(this, palette)
+        content.addView(UiKit.sectionLabel(this@SetupActivity, "Tampilan & Ergonomi", palette))
+        val visualCard = UiKit.bentoCard(this@SetupActivity, palette)
 
-        // Tema
         visualCard.addView(
             buildStackedPrefRow(
                 title = "Tema Permukaan",
                 subtitle = "AMOLED menghemat daya piksel layar",
                 palette = palette,
                 control = UiKit.segmentedControl(
-                    ctx = this,
+                    ctx = this@SetupActivity,
                     options = listOf("Mint Light", "AMOLED Black"),
                     selectedIndex = if (amoled) 1 else 0,
                     palette = palette
@@ -221,9 +231,8 @@ class SetupActivity : Activity() {
             )
         )
 
-        visualCard.addView(UiKit.divider(this, palette))
+        visualCard.addView(UiKit.divider(this@SetupActivity, palette))
 
-        // Skala Tinggi
         val curScale = devicePrefs.getFloat("height_scale", 1.0f)
         val scaleIdx = when {
             curScale < 0.95f -> 0
@@ -236,7 +245,7 @@ class SetupActivity : Activity() {
                 subtitle = "Proporsi vertikal area ketik",
                 palette = palette,
                 control = UiKit.segmentedControl(
-                    ctx = this,
+                    ctx = this@SetupActivity,
                     options = listOf("90%", "100%", "110%"),
                     selectedIndex = scaleIdx,
                     palette = palette
@@ -251,14 +260,13 @@ class SetupActivity : Activity() {
             )
         )
 
-        visualCard.addView(UiKit.divider(this, palette))
+        visualCard.addView(UiKit.divider(this@SetupActivity, palette))
 
-        // Mode Satu Tangan
         val curHand = devicePrefs.getInt("hand_mode", 0)
         val handSegIdx = when (curHand) {
-            2 -> 1 // Kiri
-            1 -> 2 // Kanan
-            else -> 0 // Full
+            2 -> 1
+            1 -> 2
+            else -> 0
         }
         visualCard.addView(
             buildStackedPrefRow(
@@ -266,7 +274,7 @@ class SetupActivity : Activity() {
                 subtitle = "Lebar 82% dengan panel tukar sisi cepat",
                 palette = palette,
                 control = UiKit.segmentedControl(
-                    ctx = this,
+                    ctx = this@SetupActivity,
                     options = listOf("Full", "Kiri", "Kanan"),
                     selectedIndex = handSegIdx,
                     palette = palette
@@ -283,10 +291,9 @@ class SetupActivity : Activity() {
         content.addView(visualCard)
 
         // --- CARD 3: INPUT & KAMUS LOKAL ---
-        content.addView(UiKit.sectionLabel(this, "Input & Kamus Adaptif", palette))
-        val inputCard = UiKit.bentoCard(this, palette)
+        content.addView(UiKit.sectionLabel(this@SetupActivity, "Input & Kamus Adaptif", palette))
+        val inputCard = UiKit.bentoCard(this@SetupActivity, palette)
 
-        // Bahasa Utama
         val isId = devicePrefs.getBoolean("lang_id", false)
         inputCard.addView(
             buildStackedPrefRow(
@@ -294,7 +301,7 @@ class SetupActivity : Activity() {
                 subtitle = "Dapat diganti cepat lewat tahan spasi",
                 palette = palette,
                 control = UiKit.segmentedControl(
-                    ctx = this,
+                    ctx = this@SetupActivity,
                     options = listOf("English", "Indonesia"),
                     selectedIndex = if (isId) 1 else 0,
                     palette = palette
@@ -304,11 +311,10 @@ class SetupActivity : Activity() {
             )
         )
 
-        inputCard.addView(UiKit.divider(this, palette))
+        inputCard.addView(UiKit.divider(this@SetupActivity, palette))
 
-        // Getaran Haptik (Inline Toggle Row)
         val hapticOn = devicePrefs.getBoolean("haptic_enabled", true)
-        val hapticSwitch = ModernSwitchView(this, hapticOn, palette) { checked ->
+        val hapticSwitch = ModernSwitchView(this@SetupActivity, hapticOn, palette) { checked ->
             devicePrefs.edit().putBoolean("haptic_enabled", checked).apply()
         }
         inputCard.addView(
@@ -320,10 +326,9 @@ class SetupActivity : Activity() {
             )
         )
 
-        inputCard.addView(UiKit.divider(this, palette))
+        inputCard.addView(UiKit.divider(this@SetupActivity, palette))
 
-        // Kamus Adaptif Persisten
-        val countTv = TextView(this).apply {
+        val countTv = TextView(this@SetupActivity).apply {
             textSize = 11.5f
             setTextColor(palette.textSecondary)
         }
@@ -340,14 +345,14 @@ class SetupActivity : Activity() {
             refreshDictionaryCount()
         }
 
-        val dictRow = LinearLayout(this).apply {
+        val dictRow = LinearLayout(this@SetupActivity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val dictTextCol = LinearLayout(this).apply {
+        val dictTextCol = LinearLayout(this@SetupActivity).apply {
             orientation = LinearLayout.VERTICAL
         }
-        val dictTitle = TextView(this).apply {
+        val dictTitle = TextView(this@SetupActivity).apply {
             text = "Kamus Pribadi (Device Protected)"
             textSize = 13.5f
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
@@ -362,10 +367,10 @@ class SetupActivity : Activity() {
         content.addView(inputCard)
 
         // --- CARD 4: SANDBOX UJI KETIK ---
-        content.addView(UiKit.sectionLabel(this, "Sandbox Uji Langsung", palette))
-        val sandboxCard = UiKit.bentoCard(this, palette)
+        content.addView(UiKit.sectionLabel(this@SetupActivity, "Sandbox Uji Langsung", palette))
+        val sandboxCard = UiKit.bentoCard(this@SetupActivity, palette)
 
-        val testText = EditText(this).apply {
+        val testText = EditText(this@SetupActivity).apply {
             hint = "Ketik, swipe/glide, atau coba makro shell..."
             textSize = 13.5f
             setTextColor(palette.textPrimary)
@@ -385,7 +390,7 @@ class SetupActivity : Activity() {
             )
         }
 
-        val testNum = EditText(this).apply {
+        val testNum = EditText(this@SetupActivity).apply {
             hint = "Kolom angka (uji auto-Numpad 0–9)..."
             textSize = 13.5f
             setTextColor(palette.textPrimary)
@@ -410,7 +415,7 @@ class SetupActivity : Activity() {
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = UiKit.dp(this, 8f) }
+            ).apply { topMargin = UiKit.dp(this@SetupActivity, 8f) }
         )
         content.addView(sandboxCard)
 
@@ -434,7 +439,7 @@ class SetupActivity : Activity() {
         fg: Int,
         ripple: Int,
         onClick: () -> Unit
-    ): TextView = TextView(this).apply {
+    ): TextView = TextView(this@SetupActivity).apply {
         text = label
         textSize = 12.5f
         gravity = Gravity.CENTER
@@ -458,7 +463,7 @@ class SetupActivity : Activity() {
         subtitle: String,
         palette: SettingsPalette,
         control: View
-    ): LinearLayout = LinearLayout(this).apply {
+    ): LinearLayout = LinearLayout(this@SetupActivity).apply {
         orientation = LinearLayout.VERTICAL
         val tvTitle = TextView(this@SetupActivity).apply {
             text = title
@@ -482,7 +487,7 @@ class SetupActivity : Activity() {
         subtitle: String,
         palette: SettingsPalette,
         trailing: View
-    ): LinearLayout = LinearLayout(this).apply {
+    ): LinearLayout = LinearLayout(this@SetupActivity).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         val textCol = LinearLayout(this@SetupActivity).apply {
@@ -524,7 +529,7 @@ class SetupActivity : Activity() {
         val amoled = devicePrefs.getBoolean("amoled_dark", false)
         val palette = SettingsPalette.fromMode(amoled)
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-        val targetId = ComponentName(this, AnggiKeyboardService::class.java).flattenToShortString()
+        val targetId = ComponentName(this@SetupActivity, AnggiKeyboardService::class.java).flattenToShortString()
         val enabled = imm.enabledInputMethodList.any { it.id == targetId }
         val defaultIme = Settings.Secure.getString(contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD)
         val isDefault = defaultIme == targetId

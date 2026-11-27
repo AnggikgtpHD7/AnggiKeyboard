@@ -7,7 +7,6 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
-import android.util.StateSet
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.View
@@ -73,6 +72,9 @@ object UiKit {
 
     fun dp(ctx: Context, value: Float): Int =
         (value * ctx.resources.displayMetrics.density + 0.5f).toInt()
+
+    fun dp(view: View, value: Float): Int =
+        dp(view.context, value)
 
     fun roundedBox(fillColor: Int, radiusPx: Float, strokeColor: Int = 0, strokePx: Int = 0): GradientDrawable =
         GradientDrawable().apply {
