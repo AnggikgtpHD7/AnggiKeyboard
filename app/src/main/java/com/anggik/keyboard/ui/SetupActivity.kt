@@ -4,25 +4,34 @@ import android.app.Activity
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.text.InputType
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
+import android.view.View
 import android.view.WindowInsets
+import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
-import android.widget.Button
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.window.OnBackInvokedCallback
+import android.window.OnBackInvokedDispatcher
 import com.anggik.keyboard.service.AnggiKeyboardService
 import java.io.File
 
 class SetupActivity : Activity() {
 
-    private lateinit var statusView: TextView
-    private lateinit var prefSummaryView: TextView
+    private lateinit var rootHost: FrameLayout
+    private var statusBadgeView: TextView? = null
+    private var statusDetailView: TextView? = null
+    private var dictCountView: TextView? = null
+    private var backCallback: Any? = null
 
     private val dpContext by lazy {
         createDeviceProtectedStorageContext()
@@ -35,157 +44,504 @@ class SetupActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val dp = resources.displayMetrics.density
-        val pad = (18 * dp).toInt()
-
-        val scroll = ScrollView(this).apply {
-            setBackgroundColor(0xFFEFF2F0.toInt())
-        }
-
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(pad, pad, pad, pad)
-        }
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            scroll.setOnApplyWindowInsetsListener { v, insets ->
-                val bars = insets.getInsets(WindowInsets.Type.systemBars())
-                root.setPadding(pad + bars.left, pad + bars.top, pad + bars.right, pad + bars.bottom)
-                insets
-            }
+            window.setDecorFitsSystemWindows(false)
         }
 
-        val title = TextView(this).apply {
-            text = "AnggiKeyboard Universal (API 26–36)"
-            textSize = 20f
-            setTextColor(0xFF121413.toInt())
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val cb = OnBackInvokedCallback { finish() }
+            onBackInvokedDispatcher.registerOnBackInvokedCallback(
+                OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                cb
+            )
+            backCallback = cb
         }
 
-        statusView = TextView(this).apply {
-            textSize = 13.5f
-            setTextColor(0xFF4B504D.toInt())
-            setPadding(0, (8 * dp).toInt(), 0, (10 * dp).toInt())
-        }
-
-        prefSummaryView = TextView(this).apply {
-            textSize = 13f
-            setTextColor(0xFF121413.toInt())
-            setPadding(0, 0, 0, (10 * dp).toInt())
-        }
-
-        val btnEnable = Button(this).apply {
-            text = "1. Aktifkan di Pengaturan Keyboard"
-            setOnClickListener {
-                startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
-            }
-        }
-
-        val btnSelect = Button(this).apply {
-            text = "2. Pilih AnggiKeyboard sebagai Default"
-            setOnClickListener {
-                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-                imm.showInputMethodPicker()
-            }
-        }
-
-        val btnTheme = Button(this).apply {
-            text = "3. Ganti Tema (Mint Light / AMOLED Black)"
-            setOnClickListener {
-                val next = !devicePrefs.getBoolean("amoled_dark", false)
-                devicePrefs.edit().putBoolean("amoled_dark", next).apply()
-                refreshPrefSummary()
-            }
-        }
-
-        val btnScale = Button(this).apply {
-            text = "4. Siklus Tinggi Tombol (90% / 100% / 110%)"
-            setOnClickListener {
-                val cur = devicePrefs.getFloat("height_scale", 1.0f)
-                val next = when {
-                    cur < 0.95f -> 1.0f
-                    cur < 1.05f -> 1.1f
-                    else -> 0.9f
-                }
-                devicePrefs.edit().putFloat("height_scale", next).apply()
-                refreshPrefSummary()
-            }
-        }
-
-        val btnHand = Button(this).apply {
-            text = "5. Mode Satu Tangan (Full / Kanan / Kiri)"
-            setOnClickListener {
-                val next = (devicePrefs.getInt("hand_mode", 0) + 1) % 3
-                devicePrefs.edit().putInt("hand_mode", next).apply()
-                refreshPrefSummary()
-            }
-        }
-
-        val btnHaptic = Button(this).apply {
-            text = "6. Toggle Getaran Haptik"
-            setOnClickListener {
-                val next = !devicePrefs.getBoolean("haptic_enabled", true)
-                devicePrefs.edit().putBoolean("haptic_enabled", next).apply()
-                refreshPrefSummary()
-            }
-        }
-
-        val testText = EditText(this).apply {
-            hint = "Uji ketik, swipe typing, bigram & shell macros..."
-            gravity = Gravity.TOP or Gravity.START
-            minLines = 2
-            setBackgroundColor(0xFFFFFFFF.toInt())
-            setPadding((12 * dp).toInt(), (10 * dp).toInt(), (12 * dp).toInt(), (10 * dp).toInt())
-        }
-
-        val testNumber = EditText(this).apply {
-            hint = "Uji mode Numpad otomatis (0–9)..."
-            inputType = InputType.TYPE_CLASS_NUMBER
-            setBackgroundColor(0xFFFFFFFF.toInt())
-            setPadding((12 * dp).toInt(), (10 * dp).toInt(), (12 * dp).toInt(), (10 * dp).toInt())
-        }
-
-        val gapLp = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { topMargin = (8 * dp).toInt() }
-
-        root.addView(title)
-        root.addView(statusView)
-        root.addView(prefSummaryView)
-        root.addView(btnEnable)
-        root.addView(btnSelect)
-        root.addView(btnTheme)
-        root.addView(btnScale)
-        root.addView(btnHand)
-        root.addView(btnHaptic)
-        root.addView(testText, gapLp)
-        root.addView(testNumber, gapLp)
-        scroll.addView(root)
-        setContentView(scroll)
-        refreshPrefSummary()
+        rootHost = FrameLayout(this)
+        setContentView(rootHost)
+        rebuildSettingsUi()
     }
 
-    private fun refreshPrefSummary() {
-        val amoled = devicePrefs.getBoolean("amoled_dark", false)
-        val scale = (devicePrefs.getFloat("height_scale", 1.0f) * 100).toInt()
-        val haptic = devicePrefs.getBoolean("haptic_enabled", true)
-        val handLabel = when (devicePrefs.getInt("hand_mode", 0)) {
-            1 -> "Kanan"
-            2 -> "Kiri"
-            else -> "Full"
+    override fun onDestroy() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            (backCallback as? OnBackInvokedCallback)?.let {
+                onBackInvokedDispatcher.unregisterOnBackInvokedCallback(it)
+            }
         }
-        val learnedFile = File(dpContext.filesDir, "learned_words.txt")
-        val learnedCount = if (learnedFile.exists()) learnedFile.readLines().count { it.isNotBlank() } else 0
-        prefSummaryView.text = "Tema: ${if (amoled) "AMOLED Black" else "Mint Light"} | Tinggi: ${scale}% | Tangan: $handLabel | Haptik: ${if (haptic) "ON" else "OFF"} | Kamus: $learnedCount kata"
+        super.onDestroy()
     }
 
     override fun onResume() {
         super.onResume()
+        refreshSystemStatus()
+    }
+
+    private fun rebuildSettingsUi() {
+        val amoled = devicePrefs.getBoolean("amoled_dark", false)
+        val palette = SettingsPalette.fromMode(amoled)
+        window.statusBarColor = palette.bgCanvas
+        window.navigationBarColor = palette.bgCanvas
+
+        val padH = UiKit.dp(this, 14f)
+        val padV = UiKit.dp(this, 12f)
+
+        val scroll = ScrollView(this).apply {
+            isVerticalScrollBarEnabled = false
+            setBackgroundColor(palette.bgCanvas)
+        }
+
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(padH, padV, padH, padV)
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            scroll.setOnApplyWindowInsetsListener { _, insets ->
+                val bars = insets.getInsets(
+                    WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout()
+                )
+                content.setPadding(
+                    padH + bars.left,
+                    padV + bars.top,
+                    padH + bars.right,
+                    padV + bars.bottom + UiKit.dp(this, 12f)
+                )
+                insets
+            }
+        }
+
+        // --- COMPACT HEADER ---
+        val headerRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(UiKit.dp(this, 2f), UiKit.dp(this, 2f), UiKit.dp(this, 2f), UiKit.dp(this, 8f))
+        }
+
+        val titleCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+
+        val appTitle = TextView(this).apply {
+            text = "AnggiKeyboard"
+            textSize = 20f
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setTextColor(palette.textPrimary)
+        }
+
+        val appSub = TextView(this).apply {
+            text = "Universal Canvas IME • API 26–36"
+            textSize = 12f
+            setTextColor(palette.textSecondary)
+        }
+
+        titleCol.addView(appTitle)
+        titleCol.addView(appSub)
+
+        val badge = TextView(this).apply {
+            textSize = 11f
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setPadding(UiKit.dp(this, 10f), UiKit.dp(this, 5f), UiKit.dp(this, 10f), UiKit.dp(this, 5f))
+        }
+        statusBadgeView = badge
+
+        headerRow.addView(titleCol, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        headerRow.addView(badge)
+        content.addView(headerRow)
+
+        // --- CARD 1: AKTIVASI SISTEM ---
+        val activationCard = UiKit.bentoCard(this, palette)
+        val detailTv = TextView(this).apply {
+            textSize = 12f
+            setTextColor(palette.textSecondary)
+            setPadding(0, 0, 0, UiKit.dp(this, 10f))
+        }
+        statusDetailView = detailTv
+        activationCard.addView(detailTv)
+
+        val actionBtnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+
+        val btnEnable = compactActionPill(
+            label = "1. Aktifkan IME",
+            bg = palette.accentSoft,
+            fg = palette.accentPrimary,
+            ripple = palette.accentPrimary
+        ) {
+            startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
+        }
+
+        val btnSelect = compactActionPill(
+            label = "2. Set Default",
+            bg = palette.accentPrimary,
+            fg = palette.textOnAccent,
+            ripple = 0x33FFFFFF
+        ) {
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.showInputMethodPicker()
+        }
+
+        actionBtnRow.addView(
+            btnEnable,
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginEnd = UiKit.dp(this@SetupActivity, 6f)
+            }
+        )
+        actionBtnRow.addView(
+            btnSelect,
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = UiKit.dp(this@SetupActivity, 6f)
+            }
+        )
+        activationCard.addView(actionBtnRow)
+        content.addView(activationCard)
+
+        // --- CARD 2: TAMPILAN & ERGONOMI ---
+        content.addView(UiKit.sectionLabel(this, "Tampilan & Ergonomi", palette))
+        val visualCard = UiKit.bentoCard(this, palette)
+
+        // Tema
+        visualCard.addView(
+            buildStackedPrefRow(
+                title = "Tema Permukaan",
+                subtitle = "AMOLED menghemat daya piksel layar",
+                palette = palette,
+                control = UiKit.segmentedControl(
+                    ctx = this,
+                    options = listOf("Mint Light", "AMOLED Black"),
+                    selectedIndex = if (amoled) 1 else 0,
+                    palette = palette
+                ) { idx ->
+                    val nextAmoled = idx == 1
+                    if (devicePrefs.getBoolean("amoled_dark", false) != nextAmoled) {
+                        devicePrefs.edit().putBoolean("amoled_dark", nextAmoled).apply()
+                        rebuildSettingsUi()
+                    }
+                }
+            )
+        )
+
+        visualCard.addView(UiKit.divider(this, palette))
+
+        // Skala Tinggi
+        val curScale = devicePrefs.getFloat("height_scale", 1.0f)
+        val scaleIdx = when {
+            curScale < 0.95f -> 0
+            curScale > 1.05f -> 2
+            else -> 1
+        }
+        visualCard.addView(
+            buildStackedPrefRow(
+                title = "Tinggi Tombol",
+                subtitle = "Proporsi vertikal area ketik",
+                palette = palette,
+                control = UiKit.segmentedControl(
+                    ctx = this,
+                    options = listOf("90%", "100%", "110%"),
+                    selectedIndex = scaleIdx,
+                    palette = palette
+                ) { idx ->
+                    val valScale = when (idx) {
+                        0 -> 0.9f
+                        2 -> 1.1f
+                        else -> 1.0f
+                    }
+                    devicePrefs.edit().putFloat("height_scale", valScale).apply()
+                }
+            )
+        )
+
+        visualCard.addView(UiKit.divider(this, palette))
+
+        // Mode Satu Tangan
+        val curHand = devicePrefs.getInt("hand_mode", 0)
+        val handSegIdx = when (curHand) {
+            2 -> 1 // Kiri
+            1 -> 2 // Kanan
+            else -> 0 // Full
+        }
+        visualCard.addView(
+            buildStackedPrefRow(
+                title = "Mode Satu Tangan",
+                subtitle = "Lebar 82% dengan panel tukar sisi cepat",
+                palette = palette,
+                control = UiKit.segmentedControl(
+                    ctx = this,
+                    options = listOf("Full", "Kiri", "Kanan"),
+                    selectedIndex = handSegIdx,
+                    palette = palette
+                ) { idx ->
+                    val mappedMode = when (idx) {
+                        1 -> 2
+                        2 -> 1
+                        else -> 0
+                    }
+                    devicePrefs.edit().putInt("hand_mode", mappedMode).apply()
+                }
+            )
+        )
+        content.addView(visualCard)
+
+        // --- CARD 3: INPUT & KAMUS LOKAL ---
+        content.addView(UiKit.sectionLabel(this, "Input & Kamus Adaptif", palette))
+        val inputCard = UiKit.bentoCard(this, palette)
+
+        // Bahasa Utama
+        val isId = devicePrefs.getBoolean("lang_id", false)
+        inputCard.addView(
+            buildStackedPrefRow(
+                title = "Bahasa Prediksi & Glide",
+                subtitle = "Dapat diganti cepat lewat tahan spasi",
+                palette = palette,
+                control = UiKit.segmentedControl(
+                    ctx = this,
+                    options = listOf("English", "Indonesia"),
+                    selectedIndex = if (isId) 1 else 0,
+                    palette = palette
+                ) { idx ->
+                    devicePrefs.edit().putBoolean("lang_id", idx == 1).apply()
+                }
+            )
+        )
+
+        inputCard.addView(UiKit.divider(this, palette))
+
+        // Getaran Haptik (Inline Toggle Row)
+        val hapticOn = devicePrefs.getBoolean("haptic_enabled", true)
+        val hapticSwitch = ModernSwitchView(this, hapticOn, palette) { checked ->
+            devicePrefs.edit().putBoolean("haptic_enabled", checked).apply()
+        }
+        inputCard.addView(
+            buildInlinePrefRow(
+                title = "Umpan Balik Haptik",
+                subtitle = "Getaran mikro latensi rendah saat sentuh",
+                palette = palette,
+                trailing = hapticSwitch
+            )
+        )
+
+        inputCard.addView(UiKit.divider(this, palette))
+
+        // Kamus Adaptif Persisten
+        val countTv = TextView(this).apply {
+            textSize = 11.5f
+            setTextColor(palette.textSecondary)
+        }
+        dictCountView = countTv
+
+        val btnClearDict = compactActionPill(
+            label = "Reset",
+            bg = palette.bgPillTrack,
+            fg = palette.textPrimary,
+            ripple = palette.accentPrimary
+        ) {
+            val f = File(dpContext.filesDir, "learned_words.txt")
+            if (f.exists()) f.delete()
+            refreshDictionaryCount()
+        }
+
+        val dictRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val dictTextCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        val dictTitle = TextView(this).apply {
+            text = "Kamus Pribadi (Device Protected)"
+            textSize = 13.5f
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setTextColor(palette.textPrimary)
+        }
+        dictTextCol.addView(dictTitle)
+        dictTextCol.addView(countTv)
+        dictRow.addView(dictTextCol, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        dictRow.addView(btnClearDict)
+        inputCard.addView(dictRow)
+
+        content.addView(inputCard)
+
+        // --- CARD 4: SANDBOX UJI KETIK ---
+        content.addView(UiKit.sectionLabel(this, "Sandbox Uji Langsung", palette))
+        val sandboxCard = UiKit.bentoCard(this, palette)
+
+        val testText = EditText(this).apply {
+            hint = "Ketik, swipe/glide, atau coba makro shell..."
+            textSize = 13.5f
+            setTextColor(palette.textPrimary)
+            setHintTextColor(palette.textSecondary)
+            gravity = Gravity.TOP or Gravity.START
+            minLines = 2
+            imeOptions = EditorInfo.IME_ACTION_DONE
+            background = UiKit.roundedBox(
+                palette.bgPillTrack,
+                UiKit.dp(this@SetupActivity, 10f).toFloat()
+            )
+            setPadding(
+                UiKit.dp(this@SetupActivity, 12f),
+                UiKit.dp(this@SetupActivity, 9f),
+                UiKit.dp(this@SetupActivity, 12f),
+                UiKit.dp(this@SetupActivity, 9f)
+            )
+        }
+
+        val testNum = EditText(this).apply {
+            hint = "Kolom angka (uji auto-Numpad 0–9)..."
+            textSize = 13.5f
+            setTextColor(palette.textPrimary)
+            setHintTextColor(palette.textSecondary)
+            inputType = InputType.TYPE_CLASS_NUMBER
+            imeOptions = EditorInfo.IME_ACTION_GO
+            background = UiKit.roundedBox(
+                palette.bgPillTrack,
+                UiKit.dp(this@SetupActivity, 10f).toFloat()
+            )
+            setPadding(
+                UiKit.dp(this@SetupActivity, 12f),
+                UiKit.dp(this@SetupActivity, 9f),
+                UiKit.dp(this@SetupActivity, 12f),
+                UiKit.dp(this@SetupActivity, 9f)
+            )
+        }
+
+        sandboxCard.addView(testText)
+        sandboxCard.addView(
+            testNum,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = UiKit.dp(this, 8f) }
+        )
+        content.addView(sandboxCard)
+
+        scroll.addView(content)
+        rootHost.removeAllViews()
+        rootHost.addView(
+            scroll,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+        )
+
+        refreshSystemStatus()
+        refreshDictionaryCount()
+    }
+
+    private fun compactActionPill(
+        label: String,
+        bg: Int,
+        fg: Int,
+        ripple: Int,
+        onClick: () -> Unit
+    ): TextView = TextView(this).apply {
+        text = label
+        textSize = 12.5f
+        gravity = Gravity.CENTER
+        typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+        setTextColor(fg)
+        background = UiKit.ripplePill(bg, ripple, UiKit.dp(this@SetupActivity, 10f).toFloat())
+        setPadding(
+            UiKit.dp(this@SetupActivity, 14f),
+            UiKit.dp(this@SetupActivity, 9f),
+            UiKit.dp(this@SetupActivity, 14f),
+            UiKit.dp(this@SetupActivity, 9f)
+        )
+        setOnClickListener {
+            performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            onClick()
+        }
+    }
+
+    private fun buildStackedPrefRow(
+        title: String,
+        subtitle: String,
+        palette: SettingsPalette,
+        control: View
+    ): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        val tvTitle = TextView(this@SetupActivity).apply {
+            text = title
+            textSize = 13.5f
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setTextColor(palette.textPrimary)
+        }
+        val tvSub = TextView(this@SetupActivity).apply {
+            text = subtitle
+            textSize = 11.5f
+            setTextColor(palette.textSecondary)
+            setPadding(0, UiKit.dp(this@SetupActivity, 1f), 0, UiKit.dp(this@SetupActivity, 7f))
+        }
+        addView(tvTitle)
+        addView(tvSub)
+        addView(control)
+    }
+
+    private fun buildInlinePrefRow(
+        title: String,
+        subtitle: String,
+        palette: SettingsPalette,
+        trailing: View
+    ): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        val textCol = LinearLayout(this@SetupActivity).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        val tvTitle = TextView(this@SetupActivity).apply {
+            text = title
+            textSize = 13.5f
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setTextColor(palette.textPrimary)
+        }
+        val tvSub = TextView(this@SetupActivity).apply {
+            text = subtitle
+            textSize = 11.5f
+            setTextColor(palette.textSecondary)
+        }
+        textCol.addView(tvTitle)
+        textCol.addView(tvSub)
+        addView(
+            textCol,
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginEnd = UiKit.dp(this@SetupActivity, 10f)
+            }
+        )
+        addView(trailing)
+    }
+
+    private fun refreshDictionaryCount() {
+        val learnedFile = File(dpContext.filesDir, "learned_words.txt")
+        val count = if (learnedFile.exists()) {
+            learnedFile.readLines().count { it.isNotBlank() }
+        } else {
+            0
+        }
+        dictCountView?.text = "$count kata tersimpan offline"
+    }
+
+    private fun refreshSystemStatus() {
+        val amoled = devicePrefs.getBoolean("amoled_dark", false)
+        val palette = SettingsPalette.fromMode(amoled)
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         val targetId = ComponentName(this, AnggiKeyboardService::class.java).flattenToShortString()
         val enabled = imm.enabledInputMethodList.any { it.id == targetId }
         val defaultIme = Settings.Secure.getString(contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD)
-        statusView.text = "IME ID: $targetId\nTerdaftar: ${if (enabled) "AKTIF" else "BELUM"}\nDefault Aktif: ${defaultIme ?: "-"}"
-        refreshPrefSummary()
+        val isDefault = defaultIme == targetId
+
+        statusBadgeView?.apply {
+            text = when {
+                enabled && isDefault -> "● AKTIF"
+                enabled -> "● TERDAFTAR"
+                else -> "● NONAKTIF"
+            }
+            setTextColor(if (enabled && isDefault) palette.statusOkText else palette.statusWarnText)
+            background = UiKit.roundedBox(
+                if (enabled && isDefault) palette.statusOkBg else palette.statusWarnBg,
+                UiKit.dp(this@SetupActivity, 20f).toFloat()
+            )
+        }
+
+        statusDetailView?.text = "IME: $targetId\nDefault Sistem: ${defaultIme ?: "Belum dipilih"}"
     }
 }
