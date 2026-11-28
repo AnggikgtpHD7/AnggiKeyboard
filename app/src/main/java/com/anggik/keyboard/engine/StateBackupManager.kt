@@ -38,6 +38,7 @@ object StateBackupManager {
                 put("learned_words", readLinesArray(File(dpCtx.filesDir, "learned_words.txt")))
                 put("pinned_clips_b64", readLinesArray(File(dpCtx.filesDir, "pinned_clips.b64")))
                 put("recent_symbols", readLinesArray(File(dpCtx.filesDir, "recent_symbols.txt")))
+                put("custom_snippets", readLinesArray(File(dpCtx.filesDir, "custom_snippets.tsv")))
             }
 
             val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
@@ -114,6 +115,10 @@ object StateBackupManager {
             writeLinesArray(
                 File(dpCtx.filesDir, "recent_symbols.txt"),
                 root.optJSONArray("recent_symbols")
+            )
+            writeLinesArray(
+                File(dpCtx.filesDir, "custom_snippets.tsv"),
+                root.optJSONArray("custom_snippets")
             )
 
             Result.success("Dipulihkan: $wordsCount kata, $pinsCount pin klip")

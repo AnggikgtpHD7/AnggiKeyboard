@@ -22,6 +22,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.window.OnBackInvokedCallback
 import android.window.OnBackInvokedDispatcher
+import com.anggik.keyboard.engine.SnippetEngine
 import com.anggik.keyboard.engine.StateBackupManager
 import com.anggik.keyboard.service.AnggiKeyboardService
 import java.io.File
@@ -68,7 +69,7 @@ class SetupActivity : Activity() {
 
         if (savedInstanceState == null) {
             val amoled = devicePrefs.getBoolean("amoled_dark", false)
-            val overlay = LaunchSplashOverlay(this, SettingsPalette.fromMode(amoled))
+            val overlay = LaunchSplashOverlay(this, SettingsPalette.fromContext(this@SetupActivity, amoled))
             rootHost.addView(
                 overlay,
                 FrameLayout.LayoutParams(
@@ -97,7 +98,7 @@ class SetupActivity : Activity() {
     @Suppress("DEPRECATION")
     private fun rebuildSettingsUi() {
         val amoled = devicePrefs.getBoolean("amoled_dark", false)
-        val palette = SettingsPalette.fromMode(amoled)
+        val palette = SettingsPalette.fromContext(this@SetupActivity, amoled)
         window.statusBarColor = palette.bgCanvas
         window.navigationBarColor = palette.bgCanvas
 
@@ -243,6 +244,28 @@ class SetupActivity : Activity() {
                     val nextAmoled = idx == 1
                     if (devicePrefs.getBoolean("amoled_dark", false) != nextAmoled) {
                         devicePrefs.edit().putBoolean("amoled_dark", nextAmoled).apply()
+                        rebuildSettingsUi()
+                    }
+                }
+            )
+        )
+
+        visualCard.addView(UiKit.divider(this@SetupActivity, palette))
+
+        val curAccent = devicePrefs.getInt("accent_id", 0)
+        visualCard.addView(
+            buildStackedPrefRow(
+                title = "Warna Aksen & Monet",
+                subtitle = "Monet mengikuti palet wallpaper sistem Android 12–16",
+                palette = palette,
+                control = UiKit.segmentedControl(
+                    ctx = this@SetupActivity,
+                    options = listOf("Emerald", "Cyan", "Amber", "Crimson", "Monet"),
+                    selectedIndex = curAccent,
+                    palette = palette
+                ) { idx ->
+                    if (devicePrefs.getInt("accent_id", 0) != idx) {
+                        devicePrefs.edit().putInt("accent_id", idx).apply()
                         rebuildSettingsUi()
                     }
                 }
@@ -484,6 +507,124 @@ class SetupActivity : Activity() {
 
         content.addView(smartCard)
 
+        // --- CARD 3C: CUSTOM TEXT SNIPPETS ---
+        content.addView(UiKit.sectionLabel(this@SetupActivity, "Pintasan Teks Kustom (;trigger)", palette))
+        val snippetCard = UiKit.bentoCard(this@SetupActivity, palette)
+
+        val trigInput = EditText(this@SetupActivity).apply {
+            hint = "Trigger (misal ;mail)"
+            textSize = 12.5f
+            singleLine = true
+            setTextColor(palette.textPrimary)
+            setHintTextColor(palette.textSecondary)
+            background = UiKit.roundedBox(palette.bgPillTrack, UiKit.dp(this@SetupActivity, 9f).toFloat())
+            setPadding(
+                UiKit.dp(this@SetupActivity, 10f),
+                UiKit.dp(this@SetupActivity, 7f),
+                UiKit.dp(this@SetupActivity, 10f),
+                UiKit.dp(this@SetupActivity, 7f)
+            )
+        }
+
+        val expInput = EditText(this@SetupActivity).apply {
+            hint = "Teks pengganti lengkap..."
+            textSize = 12.5f
+            singleLine = true
+            setTextColor(palette.textPrimary)
+            setHintTextColor(palette.textSecondary)
+            background = UiKit.roundedBox(palette.bgPillTrack, UiKit.dp(this@SetupActivity, 9f).toFloat())
+            setPadding(
+                UiKit.dp(this@SetupActivity, 10f),
+                UiKit.dp(this@SetupActivity, 7f),
+                UiKit.dp(this@SetupActivity, 10f),
+                UiKit.dp(this@SetupActivity, 7f)
+            )
+        }
+
+        val snippetListHost = LinearLayout(this@SetupActivity).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+
+        fun renderSnippetItems() {
+            snippetListHost.removeAllViews()
+            val saved = SnippetEngine.getAll(this@SetupActivity)
+            if (saved.isEmpty()) {
+                val emptyHint = TextView(this@SetupActivity).apply {
+                    text = "Belum ada snippet • Ketik trigger di atas untuk ekspansi instan"
+                    textSize = 11f
+                    setTextColor(palette.textSecondary)
+                    setPadding(0, UiKit.dp(this@SetupActivity, 6f), 0, 0)
+                }
+                snippetListHost.addView(emptyHint)
+                return
+            }
+            saved.take(6).forEach { snip ->
+                val row = LinearLayout(this@SetupActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(0, UiKit.dp(this@SetupActivity, 6f), 0, 0)
+                }
+                val labelTv = TextView(this@SetupActivity).apply {
+                    text = "${snip.trigger}  →  ${snip.expansion}"
+                    textSize = 12f
+                    maxLines = 1
+                    setTextColor(palette.textPrimary)
+                }
+                val delPill = compactActionPill(
+                    label = "✕",
+                    bg = palette.bgPillTrack,
+                    fg = palette.textSecondary,
+                    ripple = palette.accentPrimary
+                ) {
+                    SnippetEngine.remove(this@SetupActivity, snip.trigger)
+                    renderSnippetItems()
+                }
+                row.addView(labelTv, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                row.addView(delPill)
+                snippetListHost.addView(row)
+            }
+        }
+
+        val addSnippetBtn = compactActionPill(
+            label = "+ Simpan",
+            bg = palette.accentPrimary,
+            fg = palette.textOnAccent,
+            ripple = 0x33FFFFFF
+        ) {
+            if (SnippetEngine.upsert(this@SetupActivity, trigInput.text.toString(), expInput.text.toString())) {
+                trigInput.setText("")
+                expInput.setText("")
+                renderSnippetItems()
+            }
+        }
+
+        val inputRow = LinearLayout(this@SetupActivity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        inputRow.addView(
+            trigInput,
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0.36f).apply {
+                marginEnd = UiKit.dp(this@SetupActivity, 6f)
+            }
+        )
+        inputRow.addView(
+            expInput,
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0.64f)
+        )
+
+        snippetCard.addView(inputRow)
+        snippetCard.addView(
+            addSnippetBtn,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = UiKit.dp(this@SetupActivity, 7f) }
+        )
+        snippetCard.addView(snippetListHost)
+        renderSnippetItems()
+        content.addView(snippetCard)
+
         // --- CARD 4: SANDBOX UJI KETIK ---
         content.addView(UiKit.sectionLabel(this@SetupActivity, "Sandbox Uji Langsung", palette))
         val sandboxCard = UiKit.bentoCard(this@SetupActivity, palette)
@@ -645,7 +786,7 @@ class SetupActivity : Activity() {
 
     private fun refreshSystemStatus() {
         val amoled = devicePrefs.getBoolean("amoled_dark", false)
-        val palette = SettingsPalette.fromMode(amoled)
+        val palette = SettingsPalette.fromContext(this@SetupActivity, amoled)
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         val targetId = ComponentName(this@SetupActivity, AnggiKeyboardService::class.java).flattenToShortString()
         val enabled = imm.enabledInputMethodList.any { it.id == targetId }

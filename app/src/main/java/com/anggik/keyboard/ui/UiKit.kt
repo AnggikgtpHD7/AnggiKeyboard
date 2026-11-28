@@ -4,7 +4,9 @@ import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.Color
 import android.graphics.Typeface
+import android.os.Build
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.view.Gravity
@@ -30,7 +32,65 @@ data class SettingsPalette(
     val statusWarnText: Int
 ) {
     companion object {
-        fun fromMode(amoledDark: Boolean): SettingsPalette = if (amoledDark) {
+        fun fromContext(ctx: Context, amoledDark: Boolean): SettingsPalette {
+            val dpCtx = ctx.applicationContext.createDeviceProtectedStorageContext()
+            val accentId = dpCtx.getSharedPreferences("anggi_kb_state", Context.MODE_PRIVATE)
+                .getInt("accent_id", 0)
+            return fromMode(amoledDark, accentId, ctx)
+        }
+
+        fun fromMode(amoledDark: Boolean): SettingsPalette = fromMode(amoledDark, 0, null)
+
+        fun fromMode(amoledDark: Boolean, accentId: Int, ctx: Context?): SettingsPalette {
+            val base = basePalette(amoledDark)
+            val (primary, soft) = resolveAccentPair(amoledDark, accentId, ctx)
+            val onAccent = if (isColorBright(primary)) 0xFF08100C.toInt() else 0xFFFFFFFF.toInt()
+            return base.copy(
+                accentPrimary = primary,
+                accentSoft = soft,
+                textOnAccent = onAccent
+            )
+        }
+
+        private fun resolveAccentPair(amoledDark: Boolean, accentId: Int, ctx: Context?): Pair<Int, Int> {
+            if (accentId == 4 && ctx != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                return try {
+                    val dyn = ctx.getColor(
+                        if (amoledDark) android.R.color.system_accent1_200
+                        else android.R.color.system_accent1_600
+                    )
+                    val soft = blendOver(if (amoledDark) 0xFF111413.toInt() else 0xFFFFFFFF.toInt(), dyn, 0.18f)
+                    dyn to soft
+                } catch (_: Exception) {
+                    defaultEmerald(amoledDark)
+                }
+            }
+            return when (accentId) {
+                1 -> if (amoledDark) (0xFF26D0CE.toInt() to 0xFF102B2D.toInt()) else (0xFF007791.toInt() to 0xFFD6EEF2.toInt())
+                2 -> if (amoledDark) (0xFFF59E0B.toInt() to 0xFF2F210A.toInt()) else (0xFFB45309.toInt() to 0xFFFEF3C7.toInt())
+                3 -> if (amoledDark) (0xFFFB7185.toInt() to 0xFF311219.toInt()) else (0xFFBE123C.toInt() to 0xFFFFE4E6.toInt())
+                else -> defaultEmerald(amoledDark)
+            }
+        }
+
+        private fun defaultEmerald(amoledDark: Boolean): Pair<Int, Int> =
+            if (amoledDark) (0xFF49C474.toInt() to 0xFF162C1E.toInt())
+            else (0xFF2E8B57.toInt() to 0xFFD9ECE0.toInt())
+
+        private fun isColorBright(color: Int): Boolean {
+            val lum = (0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color)) / 255.0
+            return lum > 0.62
+        }
+
+        private fun blendOver(base: Int, overlay: Int, ratio: Float): Int {
+            val inv = 1f - ratio
+            val r = (Color.red(base) * inv + Color.red(overlay) * ratio).toInt()
+            val g = (Color.green(base) * inv + Color.green(overlay) * ratio).toInt()
+            val b = (Color.blue(base) * inv + Color.blue(overlay) * ratio).toInt()
+            return Color.rgb(r, g, b)
+        }
+
+        private fun basePalette(amoledDark: Boolean): SettingsPalette = if (amoledDark) {
             SettingsPalette(
                 bgCanvas = 0xFF000000.toInt(),
                 bgCard = 0xFF111413.toInt(),

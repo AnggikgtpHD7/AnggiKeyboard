@@ -1,5 +1,6 @@
 package com.anggik.keyboard.engine
 
+import android.content.Context
 import android.os.Build
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -48,8 +49,20 @@ object SmartMacroMathEngine {
         }
     )
 
-    fun evaluateLive(textBeforeCursor: String?): LiveActionChip? {
+    fun evaluateLive(textBeforeCursor: String?, context: Context? = null): LiveActionChip? {
         if (textBeforeCursor.isNullOrEmpty()) return null
+
+        // 0. Cek Custom User Snippet (;trigger)
+        if (context != null) {
+            val snippet = SnippetEngine.matchSuffix(context, textBeforeCursor)
+            if (snippet != null) {
+                return LiveActionChip(
+                    triggerLength = snippet.trigger.length,
+                    badgeLabel = "${snippet.trigger} → ${snippet.expansion.take(22)}",
+                    replacementText = snippet.expansion
+                )
+            }
+        }
 
         // 1. Cek Dynamic Macro Trigger di akhir kursor
         for (preset in presets) {

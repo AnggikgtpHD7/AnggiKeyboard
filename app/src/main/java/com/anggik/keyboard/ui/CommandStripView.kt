@@ -16,6 +16,7 @@ import android.widget.TextView
 import com.anggik.keyboard.engine.ClipboardVault
 import com.anggik.keyboard.engine.LiveActionChip
 import com.anggik.keyboard.engine.SmartMacroMathEngine
+import com.anggik.keyboard.engine.SnippetEngine
 import kotlin.math.abs
 
 @SuppressLint("ViewConstructor")
@@ -313,6 +314,39 @@ class CommandStripView(
                     )
                 }
                 val row = LinearLayout(context).apply { orientation = HORIZONTAL }
+                SnippetEngine.getAll(context).forEach { snip ->
+                    val snipChip = TextView(context).apply {
+                        text = "${snip.trigger} → ${snip.expansion.take(16)}"
+                        textSize = 11.5f
+                        typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+                        setTextColor(palette.accentPrimary)
+                        background = UiKit.ripplePill(
+                            palette.accentSoft,
+                            palette.accentPrimary,
+                            UiKit.dp(context, 10f).toFloat(),
+                            palette.accentPrimary,
+                            UiKit.dp(context, 1f)
+                        )
+                        setPadding(
+                            UiKit.dp(context, 10f),
+                            UiKit.dp(context, 6f),
+                            UiKit.dp(context, 10f),
+                            UiKit.dp(context, 6f)
+                        )
+                        setOnClickListener {
+                            performTickHaptic()
+                            onCommitText(snip.expansion)
+                            mode = StripMode.TOOLBAR
+                            render()
+                        }
+                    }
+                    row.addView(
+                        snipChip,
+                        LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply {
+                            marginEnd = UiKit.dp(context, 6f)
+                        }
+                    )
+                }
                 SmartMacroMathEngine.presets.forEach { preset ->
                     val chip = TextView(context).apply {
                         text = "${preset.trigger} (${preset.label})"
