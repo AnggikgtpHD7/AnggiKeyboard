@@ -1,6 +1,7 @@
 package com.anggik.keyboard.engine
 
 import android.view.KeyEvent
+import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import kotlin.math.hypot
 
@@ -70,9 +71,14 @@ class FastInputDispatcher {
         }
     }
 
-    fun commitCharFast(ic: InputConnection?, ch: Char): Boolean {
-        return commitText(ic, ch.toString(), 1)
-    }
+    fun commitText(text: CharSequence, ic: InputConnection?, newCursorPosition: Int = 1): Boolean =
+        commitText(ic, text, newCursorPosition)
+
+    fun commitCharFast(ic: InputConnection?, ch: Char): Boolean =
+        commitText(ic, ch.toString(), 1)
+
+    fun commitCharFast(ch: Char, ic: InputConnection?): Boolean =
+        commitText(ic, ch.toString(), 1)
 
     fun sendCtrlChar(ic: InputConnection?, ch: Char): Boolean {
         val conn = ic ?: return false
@@ -83,6 +89,8 @@ class FastInputDispatcher {
         }
         return commitText(conn, ch.toString(), 1)
     }
+
+    fun sendCtrlChar(ch: Char, ic: InputConnection?): Boolean = sendCtrlChar(ic, ch)
 
     fun tryConvertDoubleSpaceToPeriod(
         ic: InputConnection?,
@@ -128,9 +136,14 @@ class FastInputDispatcher {
         }
     }
 
-    fun sendBackspace(ic: InputConnection?): Boolean {
-        return sendKeyCode(ic, KeyEvent.KEYCODE_DEL)
-    }
+    fun replaceActiveWordWithSuggestion(
+        suggestion: String,
+        ic: InputConnection?,
+        appendSpace: Boolean = true
+    ): Boolean = replaceActiveWordWithSuggestion(ic, suggestion, appendSpace)
+
+    fun sendBackspace(ic: InputConnection?): Boolean =
+        sendKeyCode(ic, KeyEvent.KEYCODE_DEL)
 
     fun deleteWordBeforeCursor(ic: InputConnection?, maxChars: Int = 64): Boolean {
         val conn = ic ?: return false
@@ -157,6 +170,28 @@ class FastInputDispatcher {
         }
     }
 
+    fun performEditorAction(actionId: Int, ic: InputConnection?): Boolean =
+        performEditorAction(ic, actionId)
+
+    fun performEditorAction(editorInfo: EditorInfo?, ic: InputConnection?): Boolean {
+        val conn = ic ?: return false
+        val info = editorInfo ?: return conn.performEditorAction(EditorInfo.IME_ACTION_DONE)
+        val actionId = info.imeOptions and EditorInfo.IME_MASK_ACTION
+        return try {
+            if (info.actionId != 0) {
+                conn.performEditorAction(info.actionId)
+            } else if (actionId != EditorInfo.IME_ACTION_UNSPECIFIED && actionId != EditorInfo.IME_ACTION_NONE) {
+                conn.performEditorAction(actionId)
+            } else {
+                conn.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+                conn.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
+                true
+            }
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
     fun sendKeyCode(ic: InputConnection?, keyCode: Int): Boolean {
         val conn = ic ?: return false
         return try {
@@ -168,7 +203,11 @@ class FastInputDispatcher {
         }
     }
 
+    fun sendKeyCode(keyCode: Int, ic: InputConnection?): Boolean = sendKeyCode(ic, keyCode)
+
     fun sendKey(ic: InputConnection?, keyCode: Int): Boolean = sendKeyCode(ic, keyCode)
+
+    fun sendKey(keyCode: Int, ic: InputConnection?): Boolean = sendKeyCode(ic, keyCode)
 
     fun resolveNearestNeighbor(
         tapX: Float,
