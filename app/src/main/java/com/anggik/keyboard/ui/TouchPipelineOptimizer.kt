@@ -10,6 +10,7 @@ import android.view.Display
 import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.HapticFeedbackConstants
+import android.view.Surface
 import android.view.Window
 import com.anggik.keyboard.engine.HapticEngine
 import com.anggik.keyboard.engine.HapticProfile
@@ -78,6 +79,16 @@ object TouchPipelineOptimizer {
             if (attrs.preferredDisplayModeId != bestMode.modeId) {
                 attrs.preferredDisplayModeId = bestMode.modeId
                 win.attributes = attrs
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val surface = win.decorView?.viewRootImpl?.surface
+                if (surface != null && surface.isValid) {
+                    surface.setFrameRate(
+                        bestMode.refreshRate,
+                        Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE,
+                        Surface.CHANGE_FRAME_RATE_ALWAYS
+                    )
+                }
             }
         } catch (_: Exception) {
             // Pertahankan mode default jika OEM membatasi preferredDisplayModeId
