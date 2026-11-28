@@ -4,7 +4,7 @@ import android.view.KeyEvent
 import android.view.inputmethod.InputConnection
 import kotlin.math.hypot
 
-object FastInputDispatcher {
+class FastInputDispatcher {
 
     private val neighborMap: Map<Char, CharArray> = mapOf(
         'q' to charArrayOf('w', 'a', 's'),
