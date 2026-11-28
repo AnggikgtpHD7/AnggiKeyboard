@@ -1,4 +1,5 @@
 package com.anggik.keyboard.service
+import com.anggik.keyboard.ui.SettingsPalette
 import com.anggik.keyboard.ui.DrawerBackDispatcher
 import com.anggik.keyboard.ui.StylusHandwritingOverlay
 
@@ -367,20 +368,19 @@ class AnggiKeyboardService : InputMethodService(), AcceleratedKeyboardSurface.Li
 
     override fun onComputeInsets(outInsets: Insets) {
         super.onComputeInsets(outInsets)
-        val root = inputView ?: return
-        if (root.height > 0) {
-            val top = root.top.coerceAtLeast(0)
-            val bottom = (root.top + root.height).coerceAtLeast(top)
+        val anchor = inputViewContainer ?: touchSurface ?: return
+        if (anchor.height > 0) {
+            val top = anchor.top.coerceAtLeast(0)
+            val bottom = (anchor.top + anchor.height).coerceAtLeast(top)
             outInsets.contentTopInsets = top
             outInsets.visibleTopInsets = top
             outInsets.touchableInsets = Insets.TOUCHABLE_INSETS_REGION
-            outInsets.touchableRegion.set(0, top, root.width.coerceAtLeast(0), bottom)
+            outInsets.touchableRegion.set(0, top, anchor.width.coerceAtLeast(0), bottom)
         }
     }
 
-    override fun onStartStylusHandwriting() {
-        super.onStartStylusHandwriting()
-        val host = inputView as? android.view.ViewGroup ?: return
+    override fun onStartStylusHandwriting(): Boolean {
+        val host = inputViewContainer as? android.view.ViewGroup ?: return false
         if (handwritingOverlay == null) {
             val amoled = devicePrefs.getBoolean("amoled_dark", false)
             val palette = SettingsPalette.fromContext(this, amoled)
@@ -391,8 +391,8 @@ class AnggiKeyboardService : InputMethodService(), AcceleratedKeyboardSurface.Li
                 onBackspaceWord = {
                     val ic = currentInputConnection ?: return@StylusHandwritingOverlay
                     val before = ic.getTextBeforeCursor(64, 0)?.toString() ?: ""
-                    val trimmedLen = before.trimEnd().length
-                    val lastSpace = before.trimEnd().lastIndexOf(" ")
+                    val trimmed = before.trimEnd()
+                    val lastSpace = trimmed.lastIndexOf(" ")
                     val delCount = if (lastSpace >= 0) before.length - (lastSpace + 1) else before.length
                     if (delCount > 0) ic.deleteSurroundingText(delCount, 0)
                 },
@@ -400,9 +400,9 @@ class AnggiKeyboardService : InputMethodService(), AcceleratedKeyboardSurface.Li
             )
             host.addView(overlay, 0)
             handwritingOverlay = overlay
-            requestShowSelf(0)
         }
         handwritingOverlay?.visibility = View.VISIBLE
+        return true
     }
 
     private fun stopHandwritingOverlay() {
