@@ -547,14 +547,14 @@ class AcceleratedKeyboardSurface(context: Context) : View(context) {
         if (activeUtilityPanel == UtilityPanel.CLIPBOARD) {
             val history = listener?.getClipboardHistory().orEmpty()
             if (history.isEmpty()) {
-                val emptyRect = RectF(colGapPx, 5f * density, width - 48f * density, toolbarHeightPx - 5f * density)
-                val closeRect = RectF(width - 42f * density, 5f * density, width - colGapPx, toolbarHeightPx - 5f * density)
+                tempRect.set(colGapPx, 5f * density, width - 48f * density, toolbarHeightPx - 5f * density)
                 keyFillPaint.color = colorKeyWhite
-                canvas.drawRoundRect(emptyRect, 5f * density, 5f * density, keyFillPaint)
+                canvas.drawRoundRect(tempRect, 5f * density, 5f * density, keyFillPaint)
+                canvas.drawText("Clipboard kosong", tempRect.centerX(), tempRect.centerY() - yOff, spaceTextPaint)
+                tempRect.set(width - 42f * density, 5f * density, width - colGapPx, toolbarHeightPx - 5f * density)
                 keyFillPaint.color = colorKeyMint
-                canvas.drawRoundRect(closeRect, 5f * density, 5f * density, keyFillPaint)
-                canvas.drawText("Clipboard kosong", emptyRect.centerX(), emptyRect.centerY() - yOff, spaceTextPaint)
-                canvas.drawText("✕", closeRect.centerX(), closeRect.centerY() - yOff, spaceTextPaint)
+                canvas.drawRoundRect(tempRect, 5f * density, 5f * density, keyFillPaint)
+                canvas.drawText("✕", tempRect.centerX(), tempRect.centerY() - yOff, spaceTextPaint)
             } else {
                 val count = history.size.coerceAtMost(3)
                 for (i in 0 until count) {
