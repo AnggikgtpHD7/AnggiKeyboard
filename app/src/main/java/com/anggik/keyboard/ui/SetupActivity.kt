@@ -22,6 +22,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.window.OnBackInvokedCallback
 import android.window.OnBackInvokedDispatcher
+import com.anggik.keyboard.engine.StateBackupManager
 import com.anggik.keyboard.service.AnggiKeyboardService
 import java.io.File
 
@@ -414,6 +415,73 @@ class SetupActivity : Activity() {
                 trailing = mathMacroSwitch
             )
         )
+        smartCard.addView(UiKit.divider(this@SetupActivity, palette))
+
+        val backupStatusTv = TextView(this@SetupActivity).apply {
+            text = "Cadangkan preferensi, kamus & pin klip ke Download"
+            textSize = 11.5f
+            setTextColor(palette.textSecondary)
+            setPadding(0, 0, 0, UiKit.dp(this@SetupActivity, 8f))
+        }
+
+        val backupTitleTv = TextView(this@SetupActivity).apply {
+            text = "Backup & Restore JSON"
+            textSize = 13.5f
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setTextColor(palette.textPrimary)
+        }
+
+        val btnExport = compactActionPill(
+            label = "Ekspor JSON",
+            bg = palette.accentSoft,
+            fg = palette.accentPrimary,
+            ripple = palette.accentPrimary
+        ) {
+            val res = StateBackupManager.exportToDownloads(this@SetupActivity)
+            backupStatusTv.text = res.fold(
+                onSuccess = { path -> "Tersimpan: $path" },
+                onFailure = { err -> "Gagal ekspor: ${err.message}" }
+            )
+        }
+
+        val btnImport = compactActionPill(
+            label = "Impor Terbaru",
+            bg = palette.bgPillTrack,
+            fg = palette.textPrimary,
+            ripple = palette.accentPrimary
+        ) {
+            val res = StateBackupManager.importLatestFromDownloads(this@SetupActivity)
+            res.fold(
+                onSuccess = { msg ->
+                    rebuildSettingsUi()
+                    statusDetailView?.text = msg
+                },
+                onFailure = { err ->
+                    backupStatusTv.text = "Gagal impor: ${err.message}"
+                }
+            )
+        }
+
+        val backupBtnRow = LinearLayout(this@SetupActivity).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+        backupBtnRow.addView(
+            btnExport,
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginEnd = UiKit.dp(this@SetupActivity, 6f)
+            }
+        )
+        backupBtnRow.addView(
+            btnImport,
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = UiKit.dp(this@SetupActivity, 6f)
+            }
+        )
+
+        smartCard.addView(backupTitleTv)
+        smartCard.addView(backupStatusTv)
+        smartCard.addView(backupBtnRow)
+
         content.addView(smartCard)
 
         // --- CARD 4: SANDBOX UJI KETIK ---

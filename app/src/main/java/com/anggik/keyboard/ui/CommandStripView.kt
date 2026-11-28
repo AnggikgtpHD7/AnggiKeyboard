@@ -34,6 +34,7 @@ class CommandStripView(
         TOOLBAR,
         CLIPBOARD,
         MACROS,
+        SYMBOLS,
         TRACKPAD
     }
 
@@ -130,9 +131,15 @@ class CommandStripView(
             render()
         }
 
+        val btnSymbol = makeToolPill("☺", active = mode == StripMode.SYMBOLS) {
+            mode = if (mode == StripMode.SYMBOLS) StripMode.TOOLBAR else StripMode.SYMBOLS
+            render()
+        }
+
         topBar.addView(btnClip, pillParams(endMarginDp = 4f))
         topBar.addView(btnMacro, pillParams(endMarginDp = 4f))
-        topBar.addView(btnCursor, pillParams(endMarginDp = 6f))
+        topBar.addView(btnCursor, pillParams(endMarginDp = 4f))
+        topBar.addView(btnSymbol, pillParams(endMarginDp = 6f))
 
         // Area Tengah Dinamis: Live Math / Macro Suggestion atau Quick-Paste Clipboard
         val centerHolder = LinearLayout(context).apply {
@@ -283,6 +290,16 @@ class CommandStripView(
         when (mode) {
             StripMode.TOOLBAR, StripMode.TRACKPAD -> {
                 drawerHost.visibility = View.GONE
+            }
+            StripMode.SYMBOLS -> {
+                drawerHost.visibility = View.VISIBLE
+                val symbolDrawer = SymbolEmojiDrawer(context, palette) { token ->
+                    onCommitText(token)
+                }
+                drawerHost.addView(
+                    symbolDrawer,
+                    LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
+                )
             }
             StripMode.MACROS -> {
                 drawerHost.visibility = View.VISIBLE
