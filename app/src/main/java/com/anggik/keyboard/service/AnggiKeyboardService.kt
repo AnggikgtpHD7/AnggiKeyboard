@@ -1,5 +1,6 @@
 package com.anggik.keyboard.service
 import com.anggik.keyboard.ui.DrawerBackDispatcher
+import com.anggik.keyboard.ui.StylusHandwritingOverlay
 
 import android.content.ClipboardManager
 import android.content.Context
@@ -52,6 +53,7 @@ class AnggiKeyboardService : InputMethodService(), AcceleratedKeyboardSurface.Li
     }
 
     private var drawerBackDispatcher: DrawerBackDispatcher? = null
+    private var handwritingOverlay: StylusHandwritingOverlay? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -358,7 +360,55 @@ class AnggiKeyboardService : InputMethodService(), AcceleratedKeyboardSurface.Li
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
+        stopHandwritingOverlay()
         drawerBackDispatcher?.detach()
         super.onFinishInputView(finishingInput)
+    }
+
+    override fun onComputeInsets(outInsets: Insets) {
+        super.onComputeInsets(outInsets)
+        val root = inputView ?: return
+        if (root.height > 0) {
+            val top = root.top.coerceAtLeast(0)
+            val bottom = (root.top + root.height).coerceAtLeast(top)
+            outInsets.contentTopInsets = top
+            outInsets.visibleTopInsets = top
+            outInsets.touchableInsets = Insets.TOUCHABLE_INSETS_REGION
+            outInsets.touchableRegion.set(0, top, root.width.coerceAtLeast(0), bottom)
+        }
+    }
+
+    override fun onStartStylusHandwriting() {
+        super.onStartStylusHandwriting()
+        val host = inputView as? android.view.ViewGroup ?: return
+        if (handwritingOverlay == null) {
+            val amoled = devicePrefs.getBoolean("amoled_dark", false)
+            val palette = SettingsPalette.fromContext(this, amoled)
+            val overlay = StylusHandwritingOverlay(
+                context = this,
+                palette = palette,
+                onCommitText = { txt -> currentInputConnection?.commitText(txt, 1) },
+                onBackspaceWord = {
+                    val ic = currentInputConnection ?: return@StylusHandwritingOverlay
+                    val before = ic.getTextBeforeCursor(64, 0)?.toString() ?: ""
+                    val trimmedLen = before.trimEnd().length
+                    val lastSpace = before.trimEnd().lastIndexOf(" ")
+                    val delCount = if (lastSpace >= 0) before.length - (lastSpace + 1) else before.length
+                    if (delCount > 0) ic.deleteSurroundingText(delCount, 0)
+                },
+                onDismiss = { stopHandwritingOverlay() }
+            )
+            host.addView(overlay, 0)
+            handwritingOverlay = overlay
+            requestShowSelf(0)
+        }
+        handwritingOverlay?.visibility = View.VISIBLE
+    }
+
+    private fun stopHandwritingOverlay() {
+        val overlay = handwritingOverlay ?: return
+        overlay.visibility = View.GONE
+        (overlay.parent as? android.view.ViewGroup)?.removeView(overlay)
+        handwritingOverlay = null
     }
 }
