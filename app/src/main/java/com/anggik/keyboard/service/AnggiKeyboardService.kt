@@ -368,7 +368,7 @@ class AnggiKeyboardService : InputMethodService(), AcceleratedKeyboardSurface.Li
 
     override fun onComputeInsets(outInsets: Insets) {
         super.onComputeInsets(outInsets)
-        val anchor = inputViewContainer ?: touchSurface ?: return
+        val anchor: View = commandStripView ?: window?.window?.decorView ?: return
         if (anchor.height > 0) {
             val top = anchor.top.coerceAtLeast(0)
             val bottom = (anchor.top + anchor.height).coerceAtLeast(top)
@@ -380,7 +380,9 @@ class AnggiKeyboardService : InputMethodService(), AcceleratedKeyboardSurface.Li
     }
 
     override fun onStartStylusHandwriting(): Boolean {
-        val host = inputViewContainer as? android.view.ViewGroup ?: return false
+        val host = (commandStripView?.parent as? android.view.ViewGroup)
+            ?: (window?.window?.decorView as? android.view.ViewGroup)
+            ?: return false
         if (handwritingOverlay == null) {
             val amoled = devicePrefs.getBoolean("amoled_dark", false)
             val palette = SettingsPalette.fromContext(this, amoled)
