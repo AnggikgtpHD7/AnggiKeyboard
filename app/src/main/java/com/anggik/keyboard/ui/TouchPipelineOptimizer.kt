@@ -7,19 +7,15 @@ import android.graphics.Typeface
 import android.hardware.display.DisplayManager
 import android.os.Build
 import android.view.Display
+import android.view.HapticFeedbackConstants
 import android.view.InputDevice
 import android.view.MotionEvent
-import android.view.HapticFeedbackConstants
 import android.view.Surface
 import android.view.Window
+import android.widget.LinearLayout
 import com.anggik.keyboard.engine.HapticEngine
 import com.anggik.keyboard.engine.HapticProfile
-import android.widget.LinearLayout
 
-/**
- * Root container yang memaksa pengiriman sampel digitizer tanpa antrean VSYNC
- * (unbuffered dispatch) pada setiap gestur sentuh dari API 26 hingga API 36.
- */
 class UnbufferedInputRootLayout(context: Context) : LinearLayout(context) {
 
     init {
@@ -30,13 +26,19 @@ class UnbufferedInputRootLayout(context: Context) : LinearLayout(context) {
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            requestUnbufferedDispatch(InputDevice.SOURCE_TOUCHSCREEN)
+            try {
+                requestUnbufferedDispatch(InputDevice.SOURCE_TOUCHSCREEN)
+            } catch (_: Throwable) {
+                // Abaikan jika sumber tidak mendukung dispatch unbuffered langsung
+            }
         }
     }
 
     override fun performHapticFeedback(feedbackConstant: Int, flags: Int): Boolean {
-        val profile = if (feedbackConstant == HapticFeedbackConstants.CLOCK_TICK ||
-            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1 && feedbackConstant == HapticFeedbackConstants.TEXT_HANDLE_MOVE)
+        val profile = if (
+            feedbackConstant == HapticFeedbackConstants.CLOCK_TICK ||
+            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1 &&
+                feedbackConstant == HapticFeedbackConstants.TEXT_HANDLE_MOVE)
         ) {
             HapticProfile.TRACKPAD_TICK
         } else {
@@ -47,7 +49,11 @@ class UnbufferedInputRootLayout(context: Context) : LinearLayout(context) {
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
-            requestUnbufferedDispatch(ev)
+            try {
+                requestUnbufferedDispatch(ev)
+            } catch (_: Throwable) {
+                // Pertahankan pengiriman standar jika event tidak memenuhi syarat
+            }
         }
         return super.dispatchTouchEvent(ev)
     }
@@ -58,10 +64,6 @@ object TouchPipelineOptimizer {
     @Volatile
     private var glyphsWarmed = false
 
-    /**
-     * Mengunci jendela IME pada mode refresh rate fisik tertinggi (mis. 144Hz / 120Hz)
-     * tanpa mengubah resolusi layar agar mencegah penurunan refresh rate saat mengetik.
-     */
     fun lockHighestRefreshRate(context: Context, window: Window?) {
         val win = window ?: return
         try {
@@ -80,14 +82,15 @@ object TouchPipelineOptimizer {
                 attrs.preferredDisplayModeId = bestMode.modeId
                 win.attributes = attrs
             }
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                val surface = win.decorView?.viewRootImpl?.surface
-                if (surface != null && surface.isValid) {
-                    surface.setFrameRate(
+                try {
+                    win.decorView?.setFrameRate(
                         bestMode.refreshRate,
-                        Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE,
-                        Surface.CHANGE_FRAME_RATE_ALWAYS
+                        Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE
                     )
+                } catch (_: Throwable) {
+                    // Abaikan jika OEM menolak override frameRate langsung pada View
                 }
             }
         } catch (_: Exception) {
@@ -95,10 +98,6 @@ object TouchPipelineOptimizer {
         }
     }
 
-    /**
-     * Memanaskan atlas glif FreeType/Minikin di memori native sebelum sentuhan pertama
-     * agar frame pertama bebas dari latensi rasterisasi huruf & simbol.
-     */
     fun prewarmGlyphAtlas(context: Context) {
         if (glyphsWarmed) return
         glyphsWarmed = true
