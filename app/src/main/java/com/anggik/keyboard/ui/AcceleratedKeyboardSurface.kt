@@ -1,5 +1,7 @@
 package com.anggik.keyboard.ui
 
+import com.anggik.keyboard.engine.HapticEngine
+import com.anggik.keyboard.engine.HapticProfile
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas

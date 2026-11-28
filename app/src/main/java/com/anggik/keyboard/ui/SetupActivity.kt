@@ -22,6 +22,8 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.window.OnBackInvokedCallback
 import android.window.OnBackInvokedDispatcher
+import com.anggik.keyboard.engine.HapticEngine
+import com.anggik.keyboard.engine.HapticProfile
 import com.anggik.keyboard.engine.SnippetEngine
 import com.anggik.keyboard.engine.StateBackupManager
 import com.anggik.keyboard.service.AnggiKeyboardService
@@ -354,16 +356,26 @@ class SetupActivity : Activity() {
 
         inputCard.addView(UiKit.divider(this@SetupActivity, palette))
 
-        val hapticOn = devicePrefs.getBoolean("haptic_enabled", true)
-        val hapticSwitch = ModernSwitchView(this@SetupActivity, hapticOn, palette) { checked ->
-            devicePrefs.edit().putBoolean("haptic_enabled", checked).apply()
-        }
+        val curHaptic = HapticEngine.currentStrength(this@SetupActivity)
         inputCard.addView(
-            buildInlinePrefRow(
-                title = "Umpan Balik Haptik",
-                subtitle = "Getaran mikro latensi rendah saat sentuh",
+            buildStackedPrefRow(
+                title = "Profil Motor Linear Haptik",
+                subtitle = HapticEngine.diagnostics(this@SetupActivity),
                 palette = palette,
-                trailing = hapticSwitch
+                control = UiKit.segmentedControl(
+                    ctx = this@SetupActivity,
+                    options = listOf("Mati", "Ringan", "Mekanikal", "Tegas"),
+                    selectedIndex = curHaptic,
+                    palette = palette
+                ) { idx ->
+                    devicePrefs.edit()
+                        .putInt("haptic_strength", idx)
+                        .putBoolean("haptic_enabled", idx > 0)
+                        .apply()
+                    if (idx > 0) {
+                        HapticEngine.fire(this@SetupActivity, HapticProfile.KEY_ACTION)
+                    }
+                }
             )
         )
 
@@ -712,7 +724,7 @@ class SetupActivity : Activity() {
             UiKit.dp(this@SetupActivity, 9f)
         )
         setOnClickListener {
-            performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            HapticEngine.fire(this, HapticProfile.UI_TAP)
             onClick()
         }
     }

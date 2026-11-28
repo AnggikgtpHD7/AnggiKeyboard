@@ -14,6 +14,8 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import com.anggik.keyboard.engine.ClipboardVault
+import com.anggik.keyboard.engine.HapticEngine
+import com.anggik.keyboard.engine.HapticProfile
 import com.anggik.keyboard.engine.LiveActionChip
 import com.anggik.keyboard.engine.SmartMacroMathEngine
 import com.anggik.keyboard.engine.SnippetEngine
@@ -503,11 +505,7 @@ class CommandStripView(
         }
 
     private fun performTickHaptic() {
-        val code = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-            HapticFeedbackConstants.TEXT_HANDLE_MOVE
-        } else {
-            HapticFeedbackConstants.CLOCK_TICK
-        }
-        performHapticFeedback(code)
+        val profile = if (mode == StripMode.TRACKPAD) HapticProfile.TRACKPAD_TICK else HapticProfile.UI_TAP
+        HapticEngine.fire(this, profile)
     }
 }

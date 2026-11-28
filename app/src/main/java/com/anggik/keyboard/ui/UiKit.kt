@@ -14,6 +14,8 @@ import android.view.HapticFeedbackConstants
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.anggik.keyboard.engine.HapticEngine
+import com.anggik.keyboard.engine.HapticProfile
 
 data class SettingsPalette(
     val bgCanvas: Int,
@@ -222,7 +224,7 @@ object UiKit {
                 gravity = Gravity.CENTER
                 setPadding(dp(ctx, 10f), dp(ctx, 6f), dp(ctx, 10f), dp(ctx, 6f))
                 setOnClickListener {
-                    performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    HapticEngine.fire(this, HapticProfile.UI_TAP)
                     renderSelection(idx)
                     onSelect(idx)
                 }
@@ -258,7 +260,7 @@ class ModernSwitchView(
         isFocusable = true
         setOnClickListener {
             isChecked = !isChecked
-            performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            HapticEngine.fire(this, HapticProfile.UI_TAP)
             invalidate()
             onToggle(isChecked)
         }

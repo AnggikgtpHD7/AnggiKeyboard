@@ -9,7 +9,10 @@ import android.os.Build
 import android.view.Display
 import android.view.InputDevice
 import android.view.MotionEvent
+import android.view.HapticFeedbackConstants
 import android.view.Window
+import com.anggik.keyboard.engine.HapticEngine
+import com.anggik.keyboard.engine.HapticProfile
 import android.widget.LinearLayout
 
 /**
@@ -28,6 +31,17 @@ class UnbufferedInputRootLayout(context: Context) : LinearLayout(context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             requestUnbufferedDispatch(InputDevice.SOURCE_TOUCHSCREEN)
         }
+    }
+
+    override fun performHapticFeedback(feedbackConstant: Int, flags: Int): Boolean {
+        val profile = if (feedbackConstant == HapticFeedbackConstants.CLOCK_TICK ||
+            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1 && feedbackConstant == HapticFeedbackConstants.TEXT_HANDLE_MOVE)
+        ) {
+            HapticProfile.TRACKPAD_TICK
+        } else {
+            HapticProfile.KEY_CHAR
+        }
+        return HapticEngine.fire(context, profile)
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {

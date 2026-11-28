@@ -13,6 +13,8 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import com.anggik.keyboard.engine.HapticEngine
+import com.anggik.keyboard.engine.HapticProfile
 import java.io.File
 import kotlin.math.ceil
 
@@ -107,7 +109,7 @@ class SymbolEmojiDrawer(
                     UiKit.dp(context, 4f)
                 )
                 setOnClickListener {
-                    performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    HapticEngine.fire(this, HapticProfile.UI_TAP)
                     activeTab = idx
                     gridScroll.scrollTo(0, 0)
                     render()
@@ -246,7 +248,7 @@ class SymbolEmojiDrawer(
                     val idx = hitTest(event.x, event.y)
                     if (idx >= 0 && idx == pressedIndex) {
                         val token = items[idx]
-                        performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                        HapticEngine.fire(this, HapticProfile.UI_TAP)
                         recordRecent(token)
                         onPickToken(token)
                     }

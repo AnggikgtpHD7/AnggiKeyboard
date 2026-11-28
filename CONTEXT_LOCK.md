@@ -1,4 +1,4 @@
-# AnggiKeyboard — Absolute Context & Engineering Lock (v1.8.0)
+# AnggiKeyboard — Absolute Context & Engineering Lock (v1.9.0)
 
 ## 1. Environment & Target Hardware
 - **Developer:** Anggik (Medan, Sumatera Utara, Indonesia)
@@ -11,7 +11,7 @@
 - **Direct Boot Storage (`DeviceProtectedStorage`):** Seluruh preferensi (`anggi_kb_state`), kamus (`learned_words.txt`), pin clipboard (`pinned_clips.b64`), riwayat simbol (`recent_symbols.txt`), dan snippet (`custom_snippets.tsv`) tersimpan di `createDeviceProtectedStorageContext().filesDir`.
 - **Mandatory Post-Build Protocol:** Setiap akhir tahap *build* wajib menyajikan ide penambahan/penerapan terbaru dan mutakhir yang selaras dengan kapabilitas sistem Android terbaru (`Android 16 / API 36`), diikuti **System Risk Analysis**.
 
-## 3. Verified Module Inventory (18 Core Units — v1.8.0)
+## 3. Verified Module Inventory (19 Core Units — v1.9.0)
 1. `model/KeyModel.kt` — Definisi model tombol dan koordinat tata letak.
 2. `ui/AcceleratedKeyboardSurface.kt` — Permukaan render tombol 144Hz berbasis `Canvas` murni.
 3. `engine/FastInputDispatcher.kt` — Pengirim *commit* ketik berlatensi rendah.
@@ -30,3 +30,5 @@
 16. `ui/TouchPipelineOptimizer.kt` — `UnbufferedInputRootLayout` (`requestUnbufferedDispatch`), penguncian mode tampilan tertinggi (`144Hz` via `DisplayManager`), & `prewarmGlyphAtlas()`.
 17. `engine/InputCompatibilityRouter.kt` — Profil kompatibilitas otomatis (`com.termux` / `TYPE_NULL` -> `Ctrl+W`, password, URI/email).
 18. `service/AnggiKeyboardService.kt` — Orkestrator utama `InputMethodService`.
+
+19. `engine/HapticEngine.kt` — X-Axis Linear Motor Haptic Composition (`VibratorManager` + `VibrationEffect.Composition` + `VibrationAttributes.USAGE_TOUCH`).
