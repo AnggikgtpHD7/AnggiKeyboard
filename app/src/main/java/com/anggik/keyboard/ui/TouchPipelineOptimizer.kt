@@ -10,8 +10,8 @@ import android.view.Display
 import android.view.HapticFeedbackConstants
 import android.view.InputDevice
 import android.view.MotionEvent
-import android.view.Surface
 import android.view.Window
+import android.view.WindowManager
 import android.widget.LinearLayout
 import com.anggik.keyboard.engine.HapticEngine
 import com.anggik.keyboard.engine.HapticProfile
@@ -78,23 +78,22 @@ object TouchPipelineOptimizer {
                 .maxByOrNull { it.refreshRate } ?: return
 
             val attrs = win.attributes
+            var updated = false
             if (attrs.preferredDisplayModeId != bestMode.modeId) {
                 attrs.preferredDisplayModeId = bestMode.modeId
-                win.attributes = attrs
+                updated = true
             }
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                try {
-                    win.decorView?.setFrameRate(
-                        bestMode.refreshRate,
-                        Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE
-                    )
-                } catch (_: Throwable) {
-                    // Abaikan jika OEM menolak override frameRate langsung pada View
+            if (Build.VERSION.SDK_INT >= 35) {
+                if (attrs.frameRate != bestMode.refreshRate) {
+                    attrs.frameRate = bestMode.refreshRate
+                    updated = true
                 }
             }
+            if (updated) {
+                win.attributes = attrs
+            }
         } catch (_: Exception) {
-            // Pertahankan mode default jika OEM membatasi preferredDisplayModeId
+            // Pertahankan mode default jika OEM membatasi atribut mode tampilan
         }
     }
 
