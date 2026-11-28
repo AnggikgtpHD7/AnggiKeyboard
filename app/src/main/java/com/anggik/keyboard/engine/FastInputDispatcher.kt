@@ -1,182 +1,78 @@
 package com.anggik.keyboard.engine
 
-import android.os.SystemClock
-import android.view.KeyCharacterMap
 import android.view.KeyEvent
-import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
+import kotlin.math.hypot
 
-class FastInputDispatcher {
+object FastInputDispatcher {
 
-    private val asciiCache: Array<String> = Array(128) { code -> code.toChar().toString() }
+    private val neighborMap: Map<Char, CharArray> = mapOf(
+        'q' to charArrayOf('w', 'a', 's'),
+        'w' to charArrayOf('q', 'e', 'a', 's', 'd'),
+        'e' to charArrayOf('w', 'r', 's', 'd', 'f'),
+        'r' to charArrayOf('e', 't', 'd', 'f', 'g'),
+        't' to charArrayOf('r', 'y', 'f', 'g', 'h'),
+        'y' to charArrayOf('t', 'u', 'g', 'h', 'j'),
+        'u' to charArrayOf('y', 'i', 'h', 'j', 'k'),
+        'i' to charArrayOf('u', 'o', 'j', 'k', 'l'),
+        'o' to charArrayOf('i', 'p', 'k', 'l'),
+        'p' to charArrayOf('o', 'l'),
+        'a' to charArrayOf('q', 'w', 's', 'z'),
+        's' to charArrayOf('q', 'w', 'e', 'a', 'd', 'z', 'x'),
+        'd' to charArrayOf('w', 'e', 'r', 's', 'f', 'x', 'c'),
+        'f' to charArrayOf('e', 'r', 't', 'd', 'g', 'c', 'v'),
+        'g' to charArrayOf('r', 't', 'y', 'f', 'h', 'v', 'b'),
+        'h' to charArrayOf('t', 'y', 'u', 'g', 'j', 'b', 'n'),
+        'j' to charArrayOf('y', 'u', 'i', 'h', 'k', 'n', 'm'),
+        'k' to charArrayOf('u', 'i', 'o', 'j', 'l', 'm'),
+        'l' to charArrayOf('i', 'o', 'p', 'k'),
+        'z' to charArrayOf('a', 's', 'x'),
+        'x' to charArrayOf('s', 'd', 'z', 'c'),
+        'c' to charArrayOf('d', 'f', 'x', 'v'),
+        'v' to charArrayOf('f', 'g', 'c', 'b'),
+        'b' to charArrayOf('g', 'h', 'v', 'n'),
+        'n' to charArrayOf('h', 'j', 'b', 'm'),
+        'm' to charArrayOf('j', 'k', 'n')
+    )
 
-    fun commitText(text: CharSequence, ic: InputConnection?) {
-        if (ic == null || text.isEmpty()) return
-        val resolved: CharSequence = if (text.length == 1 && text[0].code in 0..127) {
-            asciiCache[text[0].code]
-        } else {
-            text
-        }
-        ic.beginBatchEdit()
-        try {
-            ic.commitText(resolved, 1)
-        } finally {
-            ic.endBatchEdit()
-        }
+    fun commitCharFast(ic: InputConnection?, ch: Char): Boolean {
+        val conn = ic ?: return false
+        conn.commitText(ch.toString(), 1)
+        return true
     }
 
-    fun extractActiveWordPrefix(ic: InputConnection?): String {
-        if (ic == null) return ""
-        val before = ic.getTextBeforeCursor(32, 0) ?: return ""
-        if (before.isEmpty()) return ""
-        var idx = before.length - 1
-        while (idx >= 0 && before[idx].isLetter()) {
-            idx--
-        }
-        val start = idx + 1
-        return if (start < before.length) before.subSequence(start, before.length).toString() else ""
-    }
+    fun resolveNearestNeighbor(
+        tapX: Float,
+        tapY: Float,
+        primaryChar: Char,
+        candidates: List<Triple<Char, Float, Float>>,
+        maxDriftPx: Float
+    ): Char {
+        if (candidates.isEmpty()) return primaryChar
+        val lowerPrimary = primaryChar.lowercaseChar()
+        val allowedNeighbors = neighborMap[lowerPrimary] ?: return primaryChar
 
-    fun extractPreviousWord(ic: InputConnection?): String {
-        if (ic == null) return ""
-        val before = ic.getTextBeforeCursor(48, 0) ?: return ""
-        if (before.isEmpty() || !before.last().isWhitespace()) return ""
-        var end = before.length - 1
-        while (end >= 0 && before[end].isWhitespace()) end--
-        if (end < 0) return ""
-        var start = end
-        while (start >= 0 && (before[start].isLetterOrDigit() || before[start] == '\'' || before[start] == '-')) {
-            start--
-        }
-        return before.subSequence(start + 1, end + 1).toString()
-    }
+        var bestChar = primaryChar
+        var bestDist = hypot(
+            tapX - (candidates.firstOrNull { it.first == primaryChar }?.second ?: tapX),
+            tapY - (candidates.firstOrNull { it.first == primaryChar }?.third ?: tapY)
+        )
 
-    fun replaceActiveWordWithSuggestion(word: String, ic: InputConnection?) {
-        if (ic == null) return
-        val before = ic.getTextBeforeCursor(32, 0) ?: ""
-        var idx = before.length - 1
-        while (idx >= 0 && before[idx].isLetter()) {
-            idx--
-        }
-        val deleteLen = before.length - (idx + 1)
-        ic.beginBatchEdit()
-        try {
-            if (deleteLen > 0) {
-                ic.deleteSurroundingText(deleteLen, 0)
-            }
-            ic.commitText("$word ", 1)
-        } finally {
-            ic.endBatchEdit()
-        }
-    }
-
-    fun tryConvertDoubleSpaceToPeriod(ic: InputConnection?): Boolean {
-        if (ic == null) return false
-        val before = ic.getTextBeforeCursor(4, 0) ?: return false
-        if (before.length >= 2 && before.last() == ' ' && before[before.length - 2].isLetterOrDigit()) {
-            ic.beginBatchEdit()
-            try {
-                ic.deleteSurroundingText(1, 0)
-                ic.commitText(". ", 1)
-            } finally {
-                ic.endBatchEdit()
-            }
-            return true
-        }
-        return false
-    }
-
-    fun sendBackspace(ic: InputConnection?) {
-        if (ic == null) return
-        ic.beginBatchEdit()
-        try {
-            val selected = ic.getSelectedText(0)
-            if (!selected.isNullOrEmpty()) {
-                ic.commitText("", 1)
-            } else {
-                ic.deleteSurroundingText(1, 0)
-            }
-        } finally {
-            ic.endBatchEdit()
-        }
-    }
-
-    fun deleteWordBeforeCursor(ic: InputConnection?) {
-        if (ic == null) return
-        val before = ic.getTextBeforeCursor(64, 0) ?: return
-        if (before.isEmpty()) return
-        var idx = before.length - 1
-        while (idx >= 0 && before[idx].isWhitespace()) idx--
-        while (idx >= 0 && !before[idx].isWhitespace()) idx--
-        val deleteCount = before.length - (idx + 1)
-        if (deleteCount > 0) {
-            ic.beginBatchEdit()
-            try {
-                ic.deleteSurroundingText(deleteCount, 0)
-            } finally {
-                ic.endBatchEdit()
+        for ((candChar, cx, cy) in candidates) {
+            if (candChar.lowercaseChar() !in allowedNeighbors) continue
+            val d = hypot(tapX - cx, tapY - cy)
+            if (d <= maxDriftPx && d < bestDist * 0.72f) {
+                bestDist = d
+                bestChar = candChar
             }
         }
+        return bestChar
     }
 
-    fun sendCtrlChar(ch: Char, ic: InputConnection?) {
-        if (ic == null) return
-        val upper = ch.uppercaseChar()
-        val keyCode = if (upper in 'A'..'Z') {
-            KeyEvent.KEYCODE_A + (upper.code - 'A'.code)
-        } else {
-            return
-        }
-        val now = SystemClock.uptimeMillis()
-        ic.sendKeyEvent(
-            KeyEvent(
-                now, now, KeyEvent.ACTION_DOWN, keyCode, 0,
-                KeyEvent.META_CTRL_ON or KeyEvent.META_CTRL_LEFT_ON,
-                KeyCharacterMap.VIRTUAL_KEYBOARD, 0,
-                KeyEvent.FLAG_SOFT_KEYBOARD or KeyEvent.FLAG_KEEP_TOUCH_MODE
-            )
-        )
-        ic.sendKeyEvent(
-            KeyEvent(
-                now, now, KeyEvent.ACTION_UP, keyCode, 0,
-                KeyEvent.META_CTRL_ON or KeyEvent.META_CTRL_LEFT_ON,
-                KeyCharacterMap.VIRTUAL_KEYBOARD, 0,
-                KeyEvent.FLAG_SOFT_KEYBOARD or KeyEvent.FLAG_KEEP_TOUCH_MODE
-            )
-        )
-    }
-
-    fun sendKeyCode(keyCode: Int, ic: InputConnection?) {
-        if (ic == null) return
-        val now = SystemClock.uptimeMillis()
-        ic.sendKeyEvent(
-            KeyEvent(
-                now, now, KeyEvent.ACTION_DOWN, keyCode, 0, 0,
-                KeyCharacterMap.VIRTUAL_KEYBOARD, 0,
-                KeyEvent.FLAG_SOFT_KEYBOARD or KeyEvent.FLAG_KEEP_TOUCH_MODE
-            )
-        )
-        ic.sendKeyEvent(
-            KeyEvent(
-                now, now, KeyEvent.ACTION_UP, keyCode, 0, 0,
-                KeyCharacterMap.VIRTUAL_KEYBOARD, 0,
-                KeyEvent.FLAG_SOFT_KEYBOARD or KeyEvent.FLAG_KEEP_TOUCH_MODE
-            )
-        )
-    }
-
-    fun performEditorAction(info: EditorInfo?, ic: InputConnection?) {
-        if (ic == null) return
-        if (info == null) {
-            commitText("\n", ic)
-            return
-        }
-        val noEnterAction = (info.imeOptions and EditorInfo.IME_FLAG_NO_ENTER_ACTION) != 0
-        val action = info.imeOptions and EditorInfo.IME_MASK_ACTION
-        if (!noEnterAction && action != EditorInfo.IME_ACTION_NONE && action != EditorInfo.IME_ACTION_UNSPECIFIED) {
-            ic.performEditorAction(action)
-        } else {
-            commitText("\n", ic)
-        }
+    fun sendKey(ic: InputConnection?, keyCode: Int): Boolean {
+        val conn = ic ?: return false
+        conn.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
+        conn.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, keyCode))
+        return true
     }
 }

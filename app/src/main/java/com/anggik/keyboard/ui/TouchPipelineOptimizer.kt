@@ -48,7 +48,7 @@ class UnbufferedInputRootLayout(context: Context) : LinearLayout(context) {
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             try {
                 requestUnbufferedDispatch(ev)
             } catch (_: Throwable) {
