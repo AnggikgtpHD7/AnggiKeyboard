@@ -514,7 +514,7 @@ class SetupActivity : Activity() {
         val trigInput = EditText(this@SetupActivity).apply {
             hint = "Trigger (misal ;mail)"
             textSize = 12.5f
-            singleLine = true
+            setSingleLine(true)
             setTextColor(palette.textPrimary)
             setHintTextColor(palette.textSecondary)
             background = UiKit.roundedBox(palette.bgPillTrack, UiKit.dp(this@SetupActivity, 9f).toFloat())
@@ -529,7 +529,7 @@ class SetupActivity : Activity() {
         val expInput = EditText(this@SetupActivity).apply {
             hint = "Teks pengganti lengkap..."
             textSize = 12.5f
-            singleLine = true
+            setSingleLine(true)
             setTextColor(palette.textPrimary)
             setHintTextColor(palette.textSecondary)
             background = UiKit.roundedBox(palette.bgPillTrack, UiKit.dp(this@SetupActivity, 9f).toFloat())
