@@ -50,6 +50,10 @@ class AnggiKeyboardService : InputMethodService(), AcceleratedKeyboardSurface.Li
         capturePrimaryClip()
     }
 
+    private val drawerBackDispatcher by lazy {
+        DrawerBackDispatcher { commandStripView?.collapseActiveDrawer() == true }
+    }
+
     override fun onCreate() {
         super.onCreate()
         isIndonesian = devicePrefs.getBoolean("lang_id", false)
