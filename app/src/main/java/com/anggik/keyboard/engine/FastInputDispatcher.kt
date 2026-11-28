@@ -37,8 +37,12 @@ object FastInputDispatcher {
 
     fun commitCharFast(ic: InputConnection?, ch: Char): Boolean {
         val conn = ic ?: return false
-        conn.commitText(ch.toString(), 1)
-        return true
+        return try {
+            conn.commitText(ch.toString(), 1)
+            true
+        } catch (_: Throwable) {
+            false
+        }
     }
 
     fun resolveNearestNeighbor(
@@ -48,20 +52,27 @@ object FastInputDispatcher {
         candidates: List<Triple<Char, Float, Float>>,
         maxDriftPx: Float
     ): Char {
-        if (candidates.isEmpty()) return primaryChar
+        if (candidates.isEmpty() || maxDriftPx <= 0f) return primaryChar
         val lowerPrimary = primaryChar.lowercaseChar()
         val allowedNeighbors = neighborMap[lowerPrimary] ?: return primaryChar
 
+        val primaryCenter = candidates.firstOrNull { it.first == primaryChar }
+        val primaryDist = if (primaryCenter != null) {
+            hypot(tapX - primaryCenter.second, tapY - primaryCenter.third)
+        } else {
+            maxDriftPx * 0.5f
+        }
+
+        // Hanya koreksi bila titik sentuh jelas berada di tepi luar pusat tombol utama
+        if (primaryDist <= maxDriftPx * 0.45f) return primaryChar
+
         var bestChar = primaryChar
-        var bestDist = hypot(
-            tapX - (candidates.firstOrNull { it.first == primaryChar }?.second ?: tapX),
-            tapY - (candidates.firstOrNull { it.first == primaryChar }?.third ?: tapY)
-        )
+        var bestDist = primaryDist
 
         for ((candChar, cx, cy) in candidates) {
             if (candChar.lowercaseChar() !in allowedNeighbors) continue
             val d = hypot(tapX - cx, tapY - cy)
-            if (d <= maxDriftPx && d < bestDist * 0.72f) {
+            if (d <= maxDriftPx && d < bestDist * 0.68f) {
                 bestDist = d
                 bestChar = candChar
             }
@@ -71,8 +82,12 @@ object FastInputDispatcher {
 
     fun sendKey(ic: InputConnection?, keyCode: Int): Boolean {
         val conn = ic ?: return false
-        conn.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
-        conn.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, keyCode))
-        return true
+        return try {
+            conn.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
+            conn.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, keyCode))
+            true
+        } catch (_: Throwable) {
+            false
+        }
     }
 }

@@ -48,11 +48,14 @@ class UnbufferedInputRootLayout(context: Context) : LinearLayout(context) {
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        if (ev.actionMasked == MotionEvent.ACTION_DOWN && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            try {
-                requestUnbufferedDispatch(ev)
-            } catch (_: Throwable) {
-                // Pertahankan pengiriman standar jika event tidak memenuhi syarat
+        val action = ev.actionMasked
+        if (action == MotionEvent.ACTION_DOWN) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                try {
+                    requestUnbufferedDispatch(InputDevice.SOURCE_TOUCHSCREEN)
+                } catch (_: Throwable) {
+                    // Pertahankan pengiriman standar jika sumber tidak mendukung unbuffered
+                }
             }
         }
         return super.dispatchTouchEvent(ev)
