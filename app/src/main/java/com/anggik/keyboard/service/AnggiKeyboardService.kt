@@ -1,4 +1,5 @@
 package com.anggik.keyboard.service
+import com.anggik.keyboard.ui.DrawerBackDispatcher
 
 import android.content.ClipboardManager
 import android.content.Context
@@ -50,9 +51,7 @@ class AnggiKeyboardService : InputMethodService(), AcceleratedKeyboardSurface.Li
         capturePrimaryClip()
     }
 
-    private val drawerBackDispatcher by lazy {
-        DrawerBackDispatcher { commandStripView?.collapseActiveDrawer() == true }
-    }
+    private var drawerBackDispatcher: DrawerBackDispatcher? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -359,7 +358,7 @@ class AnggiKeyboardService : InputMethodService(), AcceleratedKeyboardSurface.Li
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
-        drawerBackDispatcher.detach()
+        drawerBackDispatcher?.detach()
         super.onFinishInputView(finishingInput)
     }
 }
