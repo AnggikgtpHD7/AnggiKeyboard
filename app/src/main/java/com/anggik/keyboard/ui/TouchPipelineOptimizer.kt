@@ -83,12 +83,6 @@ object TouchPipelineOptimizer {
                 attrs.preferredDisplayModeId = bestMode.modeId
                 updated = true
             }
-            if (Build.VERSION.SDK_INT >= 35) {
-                if (attrs.frameRate != bestMode.refreshRate) {
-                    attrs.frameRate = bestMode.refreshRate
-                    updated = true
-                }
-            }
             if (updated) {
                 win.attributes = attrs
             }
