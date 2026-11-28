@@ -3,7 +3,10 @@ package com.anggik.keyboard.ui
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Canvas
+import android.animation.ValueAnimator
+import android.annotation.SuppressLint
 import android.graphics.Paint
+import android.graphics.RectF
 import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Build
@@ -11,7 +14,9 @@ import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
+import android.view.MotionEvent
 import android.view.View
+import android.view.animation.DecelerateInterpolator
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.anggik.keyboard.engine.HapticEngine
@@ -283,5 +288,154 @@ class ModernSwitchView(
         val cx = if (isChecked) w - r else r
         thumbPaint.color = if (isChecked) palette.textOnAccent else palette.textSecondary
         canvas.drawCircle(cx, r, thumbRadius, thumbPaint)
+    }
+}
+
+
+@SuppressLint("ClickableViewAccessibility")
+class ModernSliderView(
+    context: Context,
+    initialValue: Int,
+    private val minValue: Int = 0,
+    private val maxValue: Int = 100,
+    private val stepPreviewInterval: Int = 5,
+    private val palette: SettingsPalette,
+    private val onValueChanged: (value: Int, fromUser: Boolean, isStepBoundary: Boolean) -> Unit
+) : View(context) {
+
+    var value: Int = initialValue.coerceIn(minValue, maxValue)
+        private set
+
+    private val density = resources.displayMetrics.density
+    private val trackHeight = 7f * density
+    private val thumbRadius = 10.5f * density
+    private val sideInset = 14f * density
+
+    private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = palette.bgPillTrack }
+    private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = palette.accentPrimary }
+    private val haloPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = (palette.accentPrimary and 0x00FFFFFF) or 0x33000000
+    }
+    private val thumbOuterPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = palette.accentPrimary }
+    private val thumbCorePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = palette.textOnAccent }
+    private val tickPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = (palette.textSecondary and 0x00FFFFFF) or 0x44000000
+    }
+
+    private val trackRect = RectF()
+    private val fillRect = RectF()
+    private var haloProgress = 0f
+    private var lastStepBucket = value / stepPreviewInterval.coerceAtLeast(1)
+    private var haloAnimator: ValueAnimator? = null
+
+    init {
+        isClickable = true
+        isFocusable = true
+    }
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val w = MeasureSpec.getSize(widthMeasureSpec)
+        val h = (38f * density).toInt()
+        setMeasuredDimension(w, h)
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        val w = width.toFloat()
+        val h = height.toFloat()
+        if (w <= sideInset * 2f) return
+
+        val cy = h / 2f
+        val left = sideInset
+        val right = w - sideInset
+        val span = right - left
+        val ratio = (value - minValue).toFloat() / (maxValue - minValue).coerceAtLeast(1).toFloat()
+        val thumbX = left + (span * ratio)
+
+        // Background Track
+        trackRect.set(left, cy - trackHeight / 2f, right, cy + trackHeight / 2f)
+        canvas.drawRoundRect(trackRect, trackHeight / 2f, trackHeight / 2f, trackPaint)
+
+        // Subtle Detent Dots (0%, 25%, 50%, 75%, 100%)
+        for (i in 0..4) {
+            val dx = left + (span * (i / 4f))
+            if (dx > thumbX + thumbRadius * 0.8f) {
+                canvas.drawCircle(dx, cy, 1.6f * density, tickPaint)
+            }
+        }
+
+        // Active Progress Fill
+        fillRect.set(left, cy - trackHeight / 2f, thumbX.coerceAtLeast(left), cy + trackHeight / 2f)
+        canvas.drawRoundRect(fillRect, trackHeight / 2f, trackHeight / 2f, fillPaint)
+
+        // Interactive Glow Halo
+        if (haloProgress > 0.01f) {
+            val haloR = thumbRadius + (8.5f * density * haloProgress)
+            canvas.drawCircle(thumbX, cy, haloR, haloPaint)
+        }
+
+        // Modern Dual-Ring Thumb
+        val activeThumbR = thumbRadius + (1.5f * density * haloProgress)
+        canvas.drawCircle(thumbX, cy, activeThumbR, thumbOuterPaint)
+        canvas.drawCircle(thumbX, cy, activeThumbR * 0.44f, thumbCorePaint)
+    }
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                parent?.requestDisallowInterceptTouchEvent(true)
+                animateHalo(1f)
+                updateFromTouchX(event.x, forceStep = true)
+                return true
+            }
+            MotionEvent.ACTION_MOVE -> {
+                updateFromTouchX(event.x, forceStep = false)
+                return true
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                parent?.requestDisallowInterceptTouchEvent(false)
+                animateHalo(0f)
+                return true
+            }
+        }
+        return super.onTouchEvent(event)
+    }
+
+    private fun updateFromTouchX(touchX: Float, forceStep: Boolean) {
+        val left = sideInset
+        val right = width.toFloat() - sideInset
+        val span = (right - left).coerceAtLeast(1f)
+        val norm = ((touchX - left) / span).coerceIn(0f, 1f)
+        val nextVal = (minValue + norm * (maxValue - minValue) + 0.5f).toInt().coerceIn(minValue, maxValue)
+
+        val bucketSize = stepPreviewInterval.coerceAtLeast(1)
+        val nextBucket = nextVal / bucketSize
+        val crossedStep = forceStep || (nextBucket != lastStepBucket)
+
+        if (nextVal != value || forceStep) {
+            value = nextVal
+            if (crossedStep) {
+                lastStepBucket = nextBucket
+            }
+            invalidate()
+            onValueChanged(value, true, crossedStep)
+        }
+    }
+
+    private fun animateHalo(target: Float) {
+        haloAnimator?.cancel()
+        haloAnimator = ValueAnimator.ofFloat(haloProgress, target).apply {
+            duration = 130L
+            interpolator = DecelerateInterpolator()
+            addUpdateListener {
+                haloProgress = it.animatedValue as Float
+                invalidate()
+            }
+            start()
+        }
+    }
+
+    override fun onDetachedFromWindow() {
+        haloAnimator?.cancel()
+        super.onDetachedFromWindow()
     }
 }

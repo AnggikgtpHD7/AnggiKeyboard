@@ -63,13 +63,39 @@ object HapticEngine {
         return vib
     }
 
-    fun currentStrength(context: Context): Int {
+    fun currentPercent(context: Context): Int {
         val dpCtx = context.applicationContext.createDeviceProtectedStorageContext()
         val prefs = dpCtx.getSharedPreferences("anggi_kb_state", Context.MODE_PRIVATE)
-        if (prefs.contains("haptic_strength")) {
-            return prefs.getInt("haptic_strength", 2).coerceIn(0, 3)
+        if (prefs.contains("haptic_percent")) {
+            return prefs.getInt("haptic_percent", 65).coerceIn(0, 100)
         }
-        return if (prefs.getBoolean("haptic_enabled", true)) 2 else 0
+        if (prefs.contains("haptic_strength")) {
+            return when (prefs.getInt("haptic_strength", 2)) {
+                0 -> 0
+                1 -> 30
+                3 -> 95
+                else -> 65
+            }
+        }
+        return if (prefs.getBoolean("haptic_enabled", true)) 65 else 0
+    }
+
+    fun setPercent(context: Context, percent: Int) {
+        val clamped = percent.coerceIn(0, 100)
+        val dpCtx = context.applicationContext.createDeviceProtectedStorageContext()
+        dpCtx.getSharedPreferences("anggi_kb_state", Context.MODE_PRIVATE)
+            .edit()
+            .putInt("haptic_percent", clamped)
+            .putBoolean("haptic_enabled", clamped > 0)
+            .apply()
+    }
+
+    fun describeIntensity(percent: Int): String = when {
+        percent <= 0 -> "Mati (0%)"
+        percent <= 25 -> "Ultra Halus ($percent%)"
+        percent <= 55 -> "Ringan ($percent%)"
+        percent <= 80 -> "Mekanikal ($percent%)"
+        else -> "Tegas Linear ($percent%)"
     }
 
     fun fire(view: View, profile: HapticProfile = HapticProfile.UI_TAP) {
@@ -87,20 +113,19 @@ object HapticEngine {
     }
 
     fun fire(context: Context, profile: HapticProfile = HapticProfile.KEY_CHAR): Boolean {
-        val strength = currentStrength(context)
-        if (strength <= 0) return true
+        return fireWithPercent(context, profile, currentPercent(context))
+    }
+
+    fun fireWithPercent(context: Context, profile: HapticProfile, percent: Int): Boolean {
+        val clamped = percent.coerceIn(0, 100)
+        if (clamped <= 0) return true
 
         val vibrator = resolveVibrator(context) ?: return false
         if (!vibrator.hasVibrator()) return false
 
-        val gain = when (strength) {
-            1 -> 0.62f
-            3 -> 1.32f
-            else -> 1.0f
-        }
-
+        val norm = clamped / 100f
         return try {
-            val effect = buildEffect(profile, gain) ?: return false
+            val effect = buildEffect(profile, norm) ?: return false
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 val attrs = VibrationAttributes.Builder()
                     .setUsage(VibrationAttributes.USAGE_TOUCH)
@@ -116,22 +141,22 @@ object HapticEngine {
         }
     }
 
-    private fun buildEffect(profile: HapticProfile, gain: Float): VibrationEffect? {
+    private fun buildEffect(profile: HapticProfile, norm: Float): VibrationEffect? {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && supportsClickAndTick) {
             val comp = VibrationEffect.startComposition()
             when (profile) {
                 HapticProfile.KEY_CHAR -> {
-                    val scale = (0.44f * gain).coerceIn(0.15f, 1.0f)
+                    val scale = (0.12f + (0.76f * norm)).coerceIn(0.10f, 1.0f)
                     comp.addPrimitive(VibrationEffect.Composition.PRIMITIVE_CLICK, scale)
                 }
                 HapticProfile.KEY_ACTION -> {
-                    val primary = (0.76f * gain).coerceIn(0.25f, 1.0f)
-                    val tail = (0.24f * gain).coerceIn(0.10f, 0.60f)
+                    val primary = (0.20f + (0.80f * norm)).coerceIn(0.18f, 1.0f)
+                    val tail = (0.10f + (0.35f * norm)).coerceIn(0.08f, 0.55f)
                     comp.addPrimitive(VibrationEffect.Composition.PRIMITIVE_CLICK, primary)
-                    comp.addPrimitive(VibrationEffect.Composition.PRIMITIVE_TICK, tail, 10)
+                    comp.addPrimitive(VibrationEffect.Composition.PRIMITIVE_TICK, tail, 9)
                 }
                 HapticProfile.TRACKPAD_TICK -> {
-                    val scale = (0.28f * gain).coerceIn(0.12f, 0.85f)
+                    val scale = (0.10f + (0.52f * norm)).coerceIn(0.08f, 0.72f)
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && supportsLowTick) {
                         comp.addPrimitive(VibrationEffect.Composition.PRIMITIVE_LOW_TICK, scale)
                     } else {
@@ -139,7 +164,7 @@ object HapticEngine {
                     }
                 }
                 HapticProfile.UI_TAP -> {
-                    val scale = (0.52f * gain).coerceIn(0.18f, 1.0f)
+                    val scale = (0.15f + (0.72f * norm)).coerceIn(0.12f, 0.95f)
                     comp.addPrimitive(VibrationEffect.Composition.PRIMITIVE_CLICK, scale)
                 }
             }
@@ -147,25 +172,22 @@ object HapticEngine {
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val predefined = when (profile) {
-                HapticProfile.KEY_ACTION -> VibrationEffect.EFFECT_HEAVY_CLICK
-                HapticProfile.TRACKPAD_TICK -> VibrationEffect.EFFECT_TICK
+            val predefined = when {
+                norm < 0.30f -> VibrationEffect.EFFECT_TICK
+                profile == HapticProfile.KEY_ACTION && norm > 0.65f -> VibrationEffect.EFFECT_HEAVY_CLICK
+                profile == HapticProfile.TRACKPAD_TICK -> VibrationEffect.EFFECT_TICK
                 else -> VibrationEffect.EFFECT_CLICK
             }
             return VibrationEffect.createPredefined(predefined)
         }
 
-        val ms = when (profile) {
-            HapticProfile.KEY_ACTION -> 14L
+        val baseMs = when (profile) {
+            HapticProfile.KEY_ACTION -> 15L
             HapticProfile.TRACKPAD_TICK -> 5L
-            else -> 8L
+            else -> 9L
         }
-        val amp = ((when (profile) {
-            HapticProfile.KEY_ACTION -> 175
-            HapticProfile.TRACKPAD_TICK -> 75
-            else -> 115
-        }) * gain).toInt().coerceIn(30, 255)
-
+        val ms = (baseMs * (0.45f + 0.75f * norm)).toLong().coerceIn(3L, 20L)
+        val amp = (35 + (220 * norm)).toInt().coerceIn(30, 255)
         return VibrationEffect.createOneShot(ms, amp)
     }
 

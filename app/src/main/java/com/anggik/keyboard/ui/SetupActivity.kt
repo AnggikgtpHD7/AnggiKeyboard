@@ -356,28 +356,82 @@ class SetupActivity : Activity() {
 
         inputCard.addView(UiKit.divider(this@SetupActivity, palette))
 
-        val curHaptic = HapticEngine.currentStrength(this@SetupActivity)
-        inputCard.addView(
-            buildStackedPrefRow(
-                title = "Profil Motor Linear Haptik",
-                subtitle = HapticEngine.diagnostics(this@SetupActivity),
-                palette = palette,
-                control = UiKit.segmentedControl(
-                    ctx = this@SetupActivity,
-                    options = listOf("Mati", "Ringan", "Mekanikal", "Tegas"),
-                    selectedIndex = curHaptic,
-                    palette = palette
-                ) { idx ->
-                    devicePrefs.edit()
-                        .putInt("haptic_strength", idx)
-                        .putBoolean("haptic_enabled", idx > 0)
-                        .apply()
-                    if (idx > 0) {
-                        HapticEngine.fire(this@SetupActivity, HapticProfile.KEY_ACTION)
-                    }
-                }
+        val curHapticPct = HapticEngine.currentPercent(this@SetupActivity)
+        val hwInfo = HapticEngine.diagnostics(this@SetupActivity)
+
+        val hapticHeaderRow = LinearLayout(this@SetupActivity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val hapticTextCol = LinearLayout(this@SetupActivity).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        val hapticTitleTv = TextView(this@SetupActivity).apply {
+            text = "Intensitas Motor Linear Haptik"
+            textSize = 13.5f
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setTextColor(palette.textPrimary)
+        }
+        val hapticSubTv = TextView(this@SetupActivity).apply {
+            text = hwInfo
+            textSize = 11.5f
+            setTextColor(palette.textSecondary)
+        }
+        hapticTextCol.addView(hapticTitleTv)
+        hapticTextCol.addView(hapticSubTv)
+
+        val hapticValueBadge = TextView(this@SetupActivity).apply {
+            text = HapticEngine.describeIntensity(curHapticPct)
+            textSize = 11f
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setTextColor(if (curHapticPct > 0) palette.accentPrimary else palette.textSecondary)
+            background = UiKit.roundedBox(
+                fillColor = if (curHapticPct > 0) palette.accentSoft else palette.bgPillTrack,
+                radiusPx = UiKit.dp(this@SetupActivity, 8f).toFloat()
             )
-        )
+            setPadding(
+                UiKit.dp(this@SetupActivity, 8f),
+                UiKit.dp(this@SetupActivity, 4f),
+                UiKit.dp(this@SetupActivity, 8f),
+                UiKit.dp(this@SetupActivity, 4f)
+            )
+        }
+
+        hapticHeaderRow.addView(hapticTextCol, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        hapticHeaderRow.addView(hapticValueBadge)
+
+        val hapticSlider = ModernSliderView(
+            context = this@SetupActivity,
+            initialValue = curHapticPct,
+            minValue = 0,
+            maxValue = 100,
+            stepPreviewInterval = 5,
+            palette = palette
+        ) { newPct, fromUser, isStepBoundary ->
+            HapticEngine.setPercent(this@SetupActivity, newPct)
+            hapticValueBadge.text = HapticEngine.describeIntensity(newPct)
+            hapticValueBadge.setTextColor(if (newPct > 0) palette.accentPrimary else palette.textSecondary)
+            hapticValueBadge.background = UiKit.roundedBox(
+                fillColor = if (newPct > 0) palette.accentSoft else palette.bgPillTrack,
+                radiusPx = UiKit.dp(this@SetupActivity, 8f).toFloat()
+            )
+            if (fromUser && isStepBoundary && newPct > 0) {
+                HapticEngine.fireWithPercent(this@SetupActivity, HapticProfile.KEY_CHAR, newPct)
+            }
+        }
+
+        val hapticContainer = LinearLayout(this@SetupActivity).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(hapticHeaderRow)
+            addView(
+                hapticSlider,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = UiKit.dp(this@SetupActivity, 6f) }
+            )
+        }
+        inputCard.addView(hapticContainer)
 
         inputCard.addView(UiKit.divider(this@SetupActivity, palette))
 

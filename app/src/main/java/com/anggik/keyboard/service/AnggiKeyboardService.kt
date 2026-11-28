@@ -353,4 +353,9 @@ class AnggiKeyboardService : InputMethodService(), AcceleratedKeyboardSurface.Li
     override fun onHandModeChanged(mode: Int) {
         devicePrefs.edit().putInt("hand_mode", mode.coerceIn(0, 2)).apply()
     }
+
+    override fun onFinishInputView(finishingInput: Boolean) {
+        drawerBackDispatcher.detach()
+        super.onFinishInputView(finishingInput)
+    }
 }

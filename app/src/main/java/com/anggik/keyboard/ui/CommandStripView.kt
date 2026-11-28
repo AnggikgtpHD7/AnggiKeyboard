@@ -44,6 +44,7 @@ class CommandStripView(
     private var mode = StripMode.TOOLBAR
     private var selectLock = false
     private var liveChip: LiveActionChip? = null
+    var onDrawerVisibilityChanged: ((Boolean) -> Unit)? = null
 
     private val topBar = LinearLayout(context)
     private val drawerHost = LinearLayout(context)
@@ -89,11 +90,23 @@ class CommandStripView(
         render()
     }
 
+    fun collapseActiveDrawer(): Boolean {
+        if (mode != StripMode.TOOLBAR) {
+            mode = StripMode.TOOLBAR
+            selectLock = false
+            render()
+            return true
+        }
+        return false
+    }
+
     fun resetTransientState() {
         if (mode != StripMode.TOOLBAR || selectLock) {
             mode = StripMode.TOOLBAR
             selectLock = false
             render()
+        } else {
+            onDrawerVisibilityChanged?.invoke(false)
         }
     }
 
@@ -108,6 +121,7 @@ class CommandStripView(
     private fun render() {
         renderTopBar()
         renderDrawer()
+        onDrawerVisibilityChanged?.invoke(mode != StripMode.TOOLBAR)
     }
 
     private fun renderTopBar() {
